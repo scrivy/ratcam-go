@@ -54,12 +54,13 @@ var (
 func takePictures() {
 	var imageBytes, stdErr bytes.Buffer
 	var start time.Time
+	var err error
 	for {
 		start = time.Now()
 		cmd := exec.Command("fswebcam", "-r", "1280x720", "--jpeg", "90", "-q", "-")
 		cmd.Stdout = &imageBytes
 		cmd.Stderr = &stdErr
-		err := cmd.Run()
+		err = cmd.Run()
 		if err != nil {
 			log.Println(err)
 			continue
@@ -67,18 +68,15 @@ func takePictures() {
 		elapsed := time.Since(start)
 		log.Printf("captured image in %s", elapsed)
 		fmt.Printf("\n%s\n", stdErr.String())
-		if strings.Contains(stdErr.String(), "unrecoverable error") {
-			imageBytes.Reset()
-			stdErr.Reset()
-			continue
+		if !strings.Contains(stdErr.String(), "unrecoverable error") {
+			mutex.Lock()
+			latestPicture = imageBytes.Bytes()
+			mutex.Unlock()
 		}
-		mutex.Lock()
-		latestPicture = imageBytes.Bytes()
-		mutex.Unlock()
 		imageBytes.Reset()
 		stdErr.Reset()
+		time.Sleep(200 * time.Millisecond)
 	}
-
 }
 
 func getLatestPicture() (picture []byte, err error) {
