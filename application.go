@@ -28,10 +28,11 @@ func main() {
 
 	http.HandleFunc("/latest.jpg", func(w http.ResponseWriter, r *http.Request) {
 
-		var imageBytes bytes.Buffer
+		var imageBytes, stdErr bytes.Buffer
 		start := time.Now()
-		cmd := exec.Command("fswebcam", "-r", "640x480", "--jpeg", "75", "-")
+		cmd := exec.Command("fswebcam", "-r", "640x480", "--jpeg", "90", "-p", "YUYV", "-")
 		cmd.Stdout = &imageBytes
+		cmd.Stderr = &stdErr
 		err := cmd.Run()
 		if err != nil {
 			log.Println(err)
@@ -39,7 +40,10 @@ func main() {
 		}
 		elapsed := time.Since(start)
 		log.Printf("captured image in %s", elapsed)
-
+		if stdErr.Len() > 0 {
+			log.Printf("exec error: %s\n", stdErr.String())
+			return
+		}
 		w.Write(imageBytes.Bytes())
 	})
 
