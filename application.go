@@ -26,7 +26,7 @@ func main() {
 		w.Write(index)
 	})
 
-	http.HandleFunc("/latest.jpg", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/latest.jpeg", func(w http.ResponseWriter, r *http.Request) {
 
 		var imageBytes, stdErr bytes.Buffer
 		start := time.Now()
@@ -42,8 +42,8 @@ func main() {
 		log.Printf("captured image in %s", elapsed)
 		if stdErr.Len() > 0 {
 			log.Printf("exec error: %s\n", stdErr.String())
-			return
 		}
+		w.Header().Set("Content-Type", "image/jpeg")
 		w.Write(imageBytes.Bytes())
 	})
 
