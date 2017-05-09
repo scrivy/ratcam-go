@@ -30,7 +30,7 @@ func main() {
 
 		var imageBytes, stdErr bytes.Buffer
 		start := time.Now()
-		cmd := exec.Command("fswebcam", "-r", "640x480", "--jpeg", "90", "-p", "YUYV", "-")
+		cmd := exec.Command("fswebcam", "-r", "1280x720", "--jpeg", "90", "-")
 		cmd.Stdout = &imageBytes
 		cmd.Stderr = &stdErr
 		err := cmd.Run()
