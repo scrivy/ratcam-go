@@ -31,9 +31,6 @@ func main() {
 			http.Error(w, http.StatusText(405), 405)
 			return
 		}
-		expires := time.Now().Add(5 * time.Minute).Format(http.TimeFormat)
-		w.Header().Set("Expires", expires)
-		w.Header().Set("Cache-Control", "max-age=600")
 		w.Write(index)
 		incoming <- true
 	})

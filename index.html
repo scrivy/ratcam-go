@@ -5,11 +5,15 @@
 <!--	<script src="https://code.jquery.com/jquery-3.2.1.slim.min.js"></script> -->
 </head>
 <body>
-<img src="/latest.jpeg" />
+<img id="pic" src="/latest.jpeg" />
 <script type="text/javascript">
-setTimeout(function() {
-	location.reload()
-}, 4000)
+var picEle = document.getElementById("pic")
+
+var refresh = function() {
+	this.src = "/latest.jpeg?time=" + new Date().getTime().toString()
+}
+
+setInterval(refresh.bind(picEle), 4000)
 </script>
 </body>
 </html>
