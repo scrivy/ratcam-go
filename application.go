@@ -22,7 +22,7 @@ func main() {
 		log.Fatalln("problem loading index.html")
 	}
 
-	incoming := make(chan bool, 50)
+	incoming := make(chan bool, 100)
 
 	go takePictures(incoming)
 
@@ -44,6 +44,7 @@ func main() {
 		w.Header().Set("Content-Type", "image/jpeg")
 		w.Write(picBytes)
 		incoming <- true
+		log.Println("served somebody")
 	})
 
 	log.Println("Listening on :8080")
@@ -59,12 +60,11 @@ func takePictures(incomingReq chan bool) {
 	var imageBytes, stdErr bytes.Buffer
 	var start time.Time
 	var err error
-	countDown := uint32(1)
+	countDown := uint8(1)
 	for {
 		select {
 		case <-incomingReq:
-			countDown++
-			log.Printf("countDown: %d\n", countDown)
+			countDown = 5
 		default:
 			if countDown > 0 {
 				start = time.Now()
@@ -95,7 +95,6 @@ func takePictures(incomingReq chan bool) {
 				imageBytes.Reset()
 				stdErr.Reset()
 				countDown--
-				log.Printf("countDown: %d\n", countDown)
 			} else {
 				time.Sleep(500 * time.Millisecond)
 			}
