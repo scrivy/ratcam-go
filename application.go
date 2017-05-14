@@ -66,16 +66,22 @@ func takePictures() {
 			continue
 		}
 		elapsed := time.Since(start)
-		log.Printf("captured image in %s", elapsed)
 		fmt.Printf("\n%s\n", stdErr.String())
-		if !strings.Contains(stdErr.String(), "unrecoverable error") {
+		if strings.Contains(stdErr.String(), "unrecoverable error") {
+
+		} else if strings.Contains(stdErr.String(), "Error opening device") {
+
+		} else if strings.Contains(stdErr.String(), "No such file or directory") {
+
+		} else {
 			mutex.Lock()
 			latestPicture = imageBytes.Bytes()
 			mutex.Unlock()
+			log.Printf("captured image in %s", elapsed)
 		}
 		imageBytes.Reset()
 		stdErr.Reset()
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(6 * time.Second)
 	}
 }
 
