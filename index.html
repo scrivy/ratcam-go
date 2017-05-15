@@ -13,7 +13,7 @@ var refresh = function() {
 	this.src = "/latest.jpeg?time=" + new Date().getTime().toString()
 }
 
-setInterval(refresh.bind(picEle), 4000)
+picEle.onload = refresh.bind(picEle)
 </script>
 </body>
 </html>
