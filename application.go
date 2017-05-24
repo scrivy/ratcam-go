@@ -65,7 +65,7 @@ func takePictures(incomingReq chan bool) {
 		select {
 		case <-incomingReq:
 			start = time.Now()
-			cmd := exec.Command("fswebcam", "-r", "1920x1080", "--jpeg", "90", "-q", "-")
+			cmd := exec.Command("fswebcam", "-r", "1920x1080", "--jpeg", "90", "-q", "--no-banner", "-")
 			cmd.Stdout = &imageBytes
 			cmd.Stderr = &stdErr
 			err = cmd.Run()
