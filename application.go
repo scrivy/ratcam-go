@@ -12,14 +12,27 @@ import (
 	"sync"
 	"time"
 
-	"github.com/getsentry/raven-go"
+	"gocv.io/x/gocv"
+)
+
+var (
+	latestPicture   []byte
+	pictureMutex    = &sync.RWMutex{}
+	lastRequest     = time.Now()
+	lastRequestLock = &sync.RWMutex{}
+
+	webcam *gocv.VideoCapture
 )
 
 func main() {
 	index, err := ioutil.ReadFile("index.html")
 	if err != nil {
-		logErr(err)
-		log.Fatalln("problem loading index.html")
+		panic(err)
+	}
+
+	webcam, err = gocv.VideoCaptureDevice(0)
+	if err != nil {
+		panic(err)
 	}
 
 	go takePictures()
@@ -49,13 +62,6 @@ func main() {
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
-var (
-	latestPicture   []byte
-	pictureMutex    = &sync.RWMutex{}
-	lastRequest     = time.Now()
-	lastRequestLock = &sync.RWMutex{}
-)
-
 func takePictures() {
 	var imageBytes, stdErr bytes.Buffer
 	var start time.Time
@@ -76,7 +82,7 @@ func takePictures() {
 		cmd.Stderr = &stdErr
 		err = cmd.Run()
 		if err != nil {
-			logErr(err)
+			log.Println(err.Error())
 			continue
 		}
 		elapsed := time.Since(start)
@@ -97,9 +103,4 @@ func takePictures() {
 		imageBytes.Reset()
 		stdErr.Reset()
 	}
-}
-
-func logErr(err error) {
-	log.Println(err)
-	raven.CaptureErrorAndWait(err, nil)
 }
