@@ -1,14 +1,9 @@
 package main
 
 import (
-	"bytes"
-	"errors"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
-	"os/exec"
-	"strings"
 	"sync"
 	"time"
 
@@ -20,17 +15,10 @@ var (
 	pictureMutex    = &sync.RWMutex{}
 	lastRequest     = time.Now()
 	lastRequestLock = &sync.RWMutex{}
-
-	webcam *gocv.VideoCapture
 )
 
 func main() {
 	index, err := ioutil.ReadFile("index.html")
-	if err != nil {
-		panic(err)
-	}
-
-	webcam, err = gocv.VideoCaptureDevice(0)
 	if err != nil {
 		panic(err)
 	}
@@ -63,9 +51,18 @@ func main() {
 }
 
 func takePictures() {
-	var imageBytes, stdErr bytes.Buffer
+	//	var imageBytes, stdErr bytes.Buffer
 	var start time.Time
+	var ok bool
 	var err error
+
+	webcam, err := gocv.VideoCaptureDevice(0)
+	if err != nil {
+		panic(err)
+	}
+
+	img := gocv.NewMat()
+
 	for {
 		lastRequestLock.RLock()
 		if !lastRequest.Add(5 * time.Second).After(time.Now()) {
@@ -75,32 +72,20 @@ func takePictures() {
 		}
 		lastRequestLock.RUnlock()
 
-		pictureMutex.Lock()
 		start = time.Now()
-		cmd := exec.Command("fswebcam", "-r", "1920x1080", "--jpeg", "90", "-q", "--no-banner", "-")
-		cmd.Stdout = &imageBytes
-		cmd.Stderr = &stdErr
-		err = cmd.Run()
-		if err != nil {
-			log.Println(err.Error())
+		pictureMutex.Lock()
+		ok = webcam.Read(img)
+		if !ok {
+			pictureMutex.Unlock()
 			continue
 		}
-		elapsed := time.Since(start)
-		fmt.Printf("\n%s\n", stdErr.String())
-		if strings.Contains(stdErr.String(), "unrecoverable error") {
-			logErr(errors.New(stdErr.String()))
-		} else if strings.Contains(stdErr.String(), "Error opening device") {
-			logErr(errors.New(stdErr.String()))
-		} else if strings.Contains(stdErr.String(), "No such file or directory") {
-			logErr(errors.New(stdErr.String()))
-		} else if len(stdErr.String()) > 0 {
-			logErr(errors.New(stdErr.String()))
-		} else {
-			latestPicture = imageBytes.Bytes()
-			log.Printf("captured image in %s", elapsed)
+		if img.Empty() {
+			log.Println("Empty image")
+			pictureMutex.Unlock()
+			continue
 		}
+		latestPicture, err = gocv.IMEncode(".jpg", img)
 		pictureMutex.Unlock()
-		imageBytes.Reset()
-		stdErr.Reset()
+		log.Printf("captured image in %s", time.Since(start).String())
 	}
 }
