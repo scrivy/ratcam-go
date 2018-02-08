@@ -82,14 +82,23 @@ func takePictures() {
 	var camera *webcam.Webcam
 	picTimeout := uint32(2)
 	var err error
+	var streaming bool
 
 	log.Printf(" config: %#v\n", config)
 
 	for {
 		lastRequestLock.RLock()
 		if !lastRequest.Add(5 * time.Second).After(time.Now()) {
-			if camera != nil {
-				closeCamera(camera)
+			if streaming {
+				if camera != nil {
+					err = camera.StopStreaming()
+					if err != nil {
+						log.Println(err.Error())
+						camera.Close()
+						camera = nil
+					}
+				}
+				streaming = false
 			}
 			time.Sleep(500 * time.Millisecond)
 			lastRequestLock.RUnlock()
@@ -97,17 +106,27 @@ func takePictures() {
 		}
 		lastRequestLock.RUnlock()
 
+
+		pictureMutex.Lock()
 		if camera == nil {
 			camera, err = openCamera()
 			if err != nil {
-				log.Println(err.Error())
-				closeCamera(camera)
-				time.Sleep(time.Millisecond * 10)
+				log.Println("openCamera(): ", err.Error())
+				pictureMutex.Unlock()
 				continue
 			}
 		}
-
-		pictureMutex.Lock()
+		if !streaming {
+			err = camera.StartStreaming()
+			if err != nil {
+				log.Println("camera.StartStreaming(): ", err)
+				camera.Close()
+				camera = nil
+				pictureMutex.Unlock()
+				continue
+			}
+			streaming = true
+		}
 		start = time.Now()
 		err = camera.WaitForFrame(picTimeout)
 		if err != nil {
@@ -116,7 +135,8 @@ func takePictures() {
 			case *webcam.Timeout:
 			default:
 				log.Println(err.Error())
-				closeCamera(camera)
+				camera.Close()
+				camera = nil
 			}
 			continue
 		}
@@ -164,30 +184,9 @@ func openCamera() (camera *webcam.Webcam, err error) {
 	if err != nil {
 		return
 	}
-	err = camera.StartStreaming()
-	if err != nil {
-		return
-	}
 	log.Println("camera opened")
 	return
 }
-
-func closeCamera(camera *webcam.Webcam) {
-	log.Println("closing camera")
-	if camera == nil {
-		return
-	}
-	err := camera.StopStreaming()
-	if err != nil {
-		log.Println(err.Error())
-	}
-	err = camera.Close()
-	if err != nil {
-		log.Println(err.Error())
-	}
-	camera = nil
-}
-
 
 func dumpWebcamFormats() {
 	cam, err := webcam.Open(webcamDevicePath)
