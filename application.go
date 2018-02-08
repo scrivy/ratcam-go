@@ -79,59 +79,56 @@ func takePictures() {
 	var jpegBuffer bytes.Buffer
 	var rawImage image.Image
 	var start time.Time
+	var camera *webcam.Webcam
 	picTimeout := uint32(2)
+	var err error
 
-	cam, err := webcam.Open("/dev/video0")
-	if err != nil {
-		panic(err)
-	}
-	defer cam.Close()
-
-	err = cam.SetAutoWhiteBalance(true)
-	if err != nil {
-		panic(err)
-	}
-
-	_, _, _, err = cam.SetImageFormat(webcam.PixelFormat(config.PixelFormat), uint32(config.Width), uint32(config.Height))
-	if err != nil {
-		panic(err)
-	}
-
-	err = cam.StartStreaming()
-	if err != nil {
-		panic(err)
-	}
+	log.Printf(" config: %#v\n", config)
 
 	for {
 		lastRequestLock.RLock()
 		if !lastRequest.Add(5 * time.Second).After(time.Now()) {
+			if camera != nil {
+				closeCamera(camera)
+			}
 			time.Sleep(500 * time.Millisecond)
 			lastRequestLock.RUnlock()
 			continue
 		}
 		lastRequestLock.RUnlock()
 
+		if camera == nil {
+			camera, err = openCamera()
+			if err != nil {
+				log.Println(err.Error())
+				closeCamera(camera)
+				time.Sleep(time.Millisecond * 10)
+				continue
+			}
+		}
+
 		pictureMutex.Lock()
 		start = time.Now()
-		err = cam.WaitForFrame(picTimeout)
+		err = camera.WaitForFrame(picTimeout)
 		if err != nil {
 			pictureMutex.Unlock()
 			switch err.(type) {
 			case *webcam.Timeout:
 			default:
 				log.Println(err.Error())
+				closeCamera(camera)
 			}
 			continue
 		}
 
-		frame, err = cam.ReadFrame()
+		frame, err = camera.ReadFrame()
 		if err != nil {
 			pictureMutex.Unlock()
 			log.Println(err.Error())
 			continue
 		}
-		rawImage = frameToYCbCr(&frame)
 
+		rawImage = frameToYCbCr(&frame)
 		err = jpeg.Encode(&jpegBuffer, rawImage, nil)
 		if err != nil {
 			pictureMutex.Unlock()
@@ -147,6 +144,50 @@ func takePictures() {
 		jpegBuffer.Reset()
 	}
 }
+
+func openCamera() (camera *webcam.Webcam, err error) {
+	defer func() {
+		if err != nil && camera != nil {
+			camera.Close()
+			camera = nil
+		}
+	}()
+	camera, err = webcam.Open(webcamDevicePath)
+	if err != nil {
+		return
+	}
+	_, _, _, err = camera.SetImageFormat(webcam.PixelFormat(config.PixelFormat), uint32(config.Width), uint32(config.Height))
+	if err != nil {
+		return
+	}
+	err = camera.SetAutoWhiteBalance(true)
+	if err != nil {
+		return
+	}
+	err = camera.StartStreaming()
+	if err != nil {
+		return
+	}
+	log.Println("camera opened")
+	return
+}
+
+func closeCamera(camera *webcam.Webcam) {
+	log.Println("closing camera")
+	if camera == nil {
+		return
+	}
+	err := camera.StopStreaming()
+	if err != nil {
+		log.Println(err.Error())
+	}
+	err = camera.Close()
+	if err != nil {
+		log.Println(err.Error())
+	}
+	camera = nil
+}
+
 
 func dumpWebcamFormats() {
 	cam, err := webcam.Open(webcamDevicePath)
@@ -167,6 +208,9 @@ func frameToYCbCr(frame *[]byte) image.Image {
 	yuyv := image.NewYCbCr(image.Rect(0, 0, config.Width, config.Height), image.YCbCrSubsampleRatio422)
 	for i := range yuyv.Cb {
 		ii := i * 4
+		if ii + 3 >= len(*frame) {
+			break
+		}
 		yuyv.Y[i*2] = (*frame)[ii]
 		yuyv.Y[i*2+1] = (*frame)[ii+2]
 		yuyv.Cb[i] = (*frame)[ii+1]
