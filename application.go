@@ -21,8 +21,7 @@ var (
 	htmlIndex       []byte
 	latestPicture   []byte
 	pictureMutex    = &sync.RWMutex{}
-	lastRequest     = time.Now()
-	lastRequestLock = &sync.RWMutex{}
+	lastRequestChan chan bool
 )
 
 type Config struct {
@@ -48,6 +47,7 @@ func main() {
 		panic(err)
 	}
 
+	lastRequestChan = make(chan bool, 20)
 	go takePictures()
 
 	log.Println("Listening on :8080")
@@ -78,9 +78,7 @@ func picHandler(ctx *fasthttp.RequestCtx) {
 
 	ctx.SetBody(reqPic)
 
-	lastRequestLock.Lock()
-	lastRequest = time.Now()
-	lastRequestLock.Unlock()
+	lastRequestChan <- true
 
 	log.Println("served somebody")
 }
@@ -90,6 +88,7 @@ func takePictures() {
 	var jpegBuffer bytes.Buffer
 	var rawImage image.Image
 	var start time.Time
+	lastRequest := time.Now()
 	var camera *webcam.Webcam
 	picTimeout := uint32(2)
 	var err error
@@ -98,80 +97,82 @@ func takePictures() {
 	log.Printf(" config: %#v\n", config)
 
 	for {
-		lastRequestLock.RLock()
-		if !lastRequest.Add(5 * time.Second).After(time.Now()) {
-			if streaming {
-				if camera != nil {
-					err = camera.StopStreaming()
-					if err != nil {
-						log.Println(err.Error())
-						camera.Close()
-						camera = nil
+		select {
+		case <-lastRequestChan:
+			lastRequest = time.Now()
+		default:
+			if !lastRequest.Add(5 * time.Second).After(time.Now()) {
+				if streaming {
+					if camera != nil {
+						err = camera.StopStreaming()
+						if err != nil {
+							log.Println(err.Error())
+							camera.Close()
+							camera = nil
+						}
 					}
+					streaming = false
 				}
-				streaming = false
+				time.Sleep(500 * time.Millisecond)
+				continue
 			}
-			time.Sleep(500 * time.Millisecond)
-			lastRequestLock.RUnlock()
-			continue
-		}
-		lastRequestLock.RUnlock()
 
-		pictureMutex.Lock()
-		if camera == nil {
-			camera, err = openCamera()
+			pictureMutex.Lock()
+			if camera == nil {
+				camera, err = openCamera()
+				if err != nil {
+					log.Println("openCamera(): ", err.Error())
+					pictureMutex.Unlock()
+					continue
+				}
+			}
+			if !streaming {
+				err = camera.StartStreaming()
+				if err != nil {
+					log.Println("camera.StartStreaming(): ", err)
+					camera.Close()
+					camera = nil
+					pictureMutex.Unlock()
+					continue
+				}
+				streaming = true
+			}
+			start = time.Now()
+			err = camera.WaitForFrame(picTimeout)
 			if err != nil {
-				log.Println("openCamera(): ", err.Error())
 				pictureMutex.Unlock()
+				switch err.(type) {
+				case *webcam.Timeout:
+				default:
+					log.Println(err.Error())
+					camera.Close()
+					camera = nil
+				}
 				continue
 			}
-		}
-		if !streaming {
-			err = camera.StartStreaming()
+
+			frame, err = camera.ReadFrame()
 			if err != nil {
-				log.Println("camera.StartStreaming(): ", err)
-				camera.Close()
-				camera = nil
 				pictureMutex.Unlock()
-				continue
-			}
-			streaming = true
-		}
-		start = time.Now()
-		err = camera.WaitForFrame(picTimeout)
-		if err != nil {
-			pictureMutex.Unlock()
-			switch err.(type) {
-			case *webcam.Timeout:
-			default:
 				log.Println(err.Error())
-				camera.Close()
-				camera = nil
+				continue
 			}
-			continue
-		}
 
-		frame, err = camera.ReadFrame()
-		if err != nil {
-			pictureMutex.Unlock()
-			log.Println(err.Error())
-			continue
-		}
+			rawImage = frameToYCbCr(&frame)
+			err = jpeg.Encode(&jpegBuffer, rawImage, nil)
+			if err != nil {
+				pictureMutex.Unlock()
+				log.Println(err.Error())
+				jpegBuffer.Reset()
+				continue
+			}
 
-		rawImage = frameToYCbCr(&frame)
-		err = jpeg.Encode(&jpegBuffer, rawImage, nil)
-		if err != nil {
+			latestPicture = jpegBuffer.Bytes()
+
 			pictureMutex.Unlock()
-			log.Println(err.Error())
+			log.Printf("captured image in %s", time.Since(start).String())
 			jpegBuffer.Reset()
-			continue
 		}
-
-		latestPicture = jpegBuffer.Bytes()
-
-		pictureMutex.Unlock()
-		log.Printf("captured image in %s", time.Since(start).String())
-		jpegBuffer.Reset()
 	}
 }
 
