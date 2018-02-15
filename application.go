@@ -6,11 +6,11 @@ import (
 	"image/jpeg"
 	"io/ioutil"
 	"log"
-	"net/http"
 	"sync"
 	"time"
 
 	"github.com/blackjack/webcam"
+	"github.com/valyala/fasthttp"
 	"gopkg.in/yaml.v2"
 )
 
@@ -18,6 +18,7 @@ const webcamDevicePath = "/dev/video0"
 
 var (
 	config          Config
+	htmlIndex       []byte
 	latestPicture   []byte
 	pictureMutex    = &sync.RWMutex{}
 	lastRequest     = time.Now()
@@ -42,36 +43,46 @@ func main() {
 		panic(err)
 	}
 
-	index, err := ioutil.ReadFile("index.html")
+	htmlIndex, err = ioutil.ReadFile("index.html")
 	if err != nil {
 		panic(err)
 	}
 
 	go takePictures()
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "GET" {
-			http.Error(w, http.StatusText(405), 405)
-			return
-		}
-		w.Write(index)
-	})
-
-	http.HandleFunc("/latest.jpeg", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "image/jpeg")
-		pictureMutex.RLock()
-		w.Write(latestPicture)
-		pictureMutex.RUnlock()
-
-		lastRequestLock.Lock()
-		lastRequest = time.Now()
-		lastRequestLock.Unlock()
-
-		log.Println("served somebody")
-	})
-
 	log.Println("Listening on :8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Fatal(fasthttp.ListenAndServe(":8080", httpRouter))
+}
+
+func httpRouter(ctx *fasthttp.RequestCtx) {
+	switch string(ctx.Path()) {
+	case "/":
+		ctx.SetStatusCode(fasthttp.StatusOK)
+		ctx.SetContentType("text/html")
+		ctx.SetBody(htmlIndex)
+	case "/latest.jpeg":
+		picHandler(ctx)
+	default:
+		ctx.SetStatusCode(fasthttp.StatusNotFound)
+		ctx.SetBodyString("not found")
+	}
+}
+
+func picHandler(ctx *fasthttp.RequestCtx) {
+	ctx.SetContentType("image/jpeg")
+
+	pictureMutex.RLock()
+	reqPic := make([]byte, len(latestPicture))
+	copy(reqPic, latestPicture)
+	pictureMutex.RUnlock()
+
+	ctx.SetBody(reqPic)
+
+	lastRequestLock.Lock()
+	lastRequest = time.Now()
+	lastRequestLock.Unlock()
+
+	log.Println("served somebody")
 }
 
 func takePictures() {
@@ -105,7 +116,6 @@ func takePictures() {
 			continue
 		}
 		lastRequestLock.RUnlock()
-
 
 		pictureMutex.Lock()
 		if camera == nil {
@@ -207,7 +217,7 @@ func frameToYCbCr(frame *[]byte) image.Image {
 	yuyv := image.NewYCbCr(image.Rect(0, 0, config.Width, config.Height), image.YCbCrSubsampleRatio422)
 	for i := range yuyv.Cb {
 		ii := i * 4
-		if ii + 3 >= len(*frame) {
+		if ii+3 >= len(*frame) {
 			break
 		}
 		yuyv.Y[i*2] = (*frame)[ii]
