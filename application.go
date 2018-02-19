@@ -2,34 +2,40 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"encoding/base64"
 	"image"
 	"image/jpeg"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/blackjack/webcam"
-	//	"github.com/gobwas/ws"
-	//	"github.com/gobwas/ws/wsutil"
+	"github.com/gobwas/ws"
+	"github.com/gobwas/ws/wsutil"
 	"gopkg.in/yaml.v2"
 )
 
 const webcamDevicePath = "/dev/video0"
 
 var (
-	camera          *webcam.Webcam
-	config          Config
-	latestPicture   []byte
-	pictureMutex    = &sync.RWMutex{}
-	lastRequestChan chan bool
+	camera      *webcam.Webcam
+	config      Config
+	newConnChan chan client
 )
 
 type Config struct {
 	PixelFormat int
 	Width       int
 	Height      int
+}
+
+type client struct {
+	conn    net.Conn
+	picChan chan []byte
+	ctx     context.Context
 }
 
 func main() {
@@ -44,11 +50,6 @@ func main() {
 	}
 	log.Printf("config:\n%#v\n", config)
 
-	htmlIndex, err := ioutil.ReadFile("index.html")
-	if err != nil {
-		panic(err)
-	}
-
 	err = openCamera()
 	if err != nil {
 		panic(err)
@@ -56,49 +57,94 @@ func main() {
 	defer camera.Close()
 	dumpWebcamFormats()
 
-	lastRequestChan = make(chan bool, 20)
+	newConnChan = make(chan client, 20)
 	go takePictures()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		htmlIndex, err := ioutil.ReadFile("index.html")
+		if err != nil {
+			log.Println(err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
 		w.Write(htmlIndex)
 	})
-	mux.HandleFunc("/latest.jpeg", picHandler)
+	mux.HandleFunc("/ws", wsHandler)
 
 	log.Println("Listening on :8080")
 	log.Fatal(http.ListenAndServe(":8080", mux))
 }
 
-func picHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "image/jpeg")
+func wsHandler(w http.ResponseWriter, r *http.Request) {
+	conn, _, _, err := ws.UpgradeHTTP(r, w, nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
-	pictureMutex.RLock()
-	reqPic := make([]byte, len(latestPicture))
-	copy(reqPic, latestPicture)
-	pictureMutex.RUnlock()
+	ctx, cancel := context.WithCancel(context.Background())
+	c := client{
+		conn:    conn,
+		picChan: make(chan []byte, 10),
+		ctx:     ctx,
+	}
+	newConnChan <- c
 
-	w.Write(reqPic)
+	// TOD create another go routine to read incoming messages and
+	// add a case in the select below
+	go func() {
+		defer func() {
+			cancel()
+			c.conn.Close()
+			close(c.picChan)
+		}()
+		for {
+			select {
+			case pic := <-c.picChan:
+				err := wsutil.WriteServerMessage(conn, ws.OpText, pic)
+				if err != nil {
+					log.Println(err)
+					return
+				}
+			}
+		}
+	}()
 
-	lastRequestChan <- true
+	/*
+		go func() {
+			defer conn.Close()
 
-	log.Println("served somebody")
+			for {
+				msg, op, err := wsutil.ReadClientData(conn)
+				if err != nil {
+					log.Println(err)
+				}
+				err = wsutil.WriteServerMessage(conn, op, msg)
+				if err != nil {
+					log.Println(err)
+				}
+			}
+		}()
+	*/
 }
 
 func takePictures() {
 	var frame []byte
-	var jpegBuffer bytes.Buffer
+	var base64image bytes.Buffer
 	var rawImage image.Image
 	var start time.Time
-	lastRequest := time.Now()
 	var err error
 	var streaming bool
+	clients := map[net.Conn]client{}
 
 	for {
 		select {
-		case <-lastRequestChan:
-			lastRequest = time.Now()
+		case c := <-newConnChan:
+			clients[c.conn] = c
 		default:
-			if !lastRequest.Add(5 * time.Second).After(time.Now()) {
+			if len(clients) == 0 {
 				if streaming {
 					err = camera.StopStreaming()
 					if err != nil {
@@ -110,12 +156,10 @@ func takePictures() {
 				continue
 			}
 
-			pictureMutex.Lock()
 			if !streaming {
 				err = camera.StartStreaming()
 				if err != nil {
 					log.Println("camera.StartStreaming(): ", err)
-					pictureMutex.Unlock()
 					continue
 				}
 				streaming = true
@@ -123,7 +167,6 @@ func takePictures() {
 			start = time.Now()
 			err = camera.WaitForFrame(1)
 			if err != nil {
-				pictureMutex.Unlock()
 				switch err.(type) {
 				case *webcam.Timeout:
 				default:
@@ -134,25 +177,33 @@ func takePictures() {
 
 			frame, err = camera.ReadFrame()
 			if err != nil {
-				pictureMutex.Unlock()
 				log.Println(err.Error())
 				continue
 			}
 
 			rawImage = frameToYCbCr(&frame)
-			err = jpeg.Encode(&jpegBuffer, rawImage, nil)
+
+			base64Encoder := base64.NewEncoder(base64.StdEncoding, &base64image)
+			err = jpeg.Encode(base64Encoder, rawImage, nil)
 			if err != nil {
-				pictureMutex.Unlock()
 				log.Println(err.Error())
-				jpegBuffer.Reset()
+				base64image.Reset()
 				continue
 			}
+			base64Encoder.Close()
 
-			latestPicture = jpegBuffer.Bytes()
+			latestPicture := base64image.Bytes()
 
-			pictureMutex.Unlock()
+			for _, c := range clients {
+				if c.ctx.Err() == nil {
+					c.picChan <- latestPicture
+				} else {
+					delete(clients, c.conn)
+				}
+			}
+
 			log.Printf("captured image in %s", time.Since(start).String())
-			jpegBuffer.Reset()
+			base64image.Reset()
 		}
 	}
 }

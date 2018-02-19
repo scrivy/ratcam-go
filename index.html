@@ -9,15 +9,19 @@
   </style>
 </head>
 <body>
-<img id="pic" src="/latest.jpeg" />
+<img id="pic" />
 <script type="text/javascript">
-var picEle = document.getElementById("pic")
+	var picEle = document.getElementById("pic")
 
-var refresh = function() {
-	this.src = "/latest.jpeg?time=" + new Date().getTime().toString()
-}
+	const socket = new WebSocket('ws://' + window.location.host + '/ws')
 
-picEle.onload = refresh.bind(picEle)
+	socket.addEventListener('open', function (event) {
+		console.log('websocket opened')
+	})
+
+	socket.addEventListener('message', function (event) {
+		picEle.src = 'data:image/jpeg;base64,' + event.data
+	})
 </script>
 </body>
 </html>
