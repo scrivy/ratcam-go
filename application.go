@@ -6,11 +6,13 @@ import (
 	"image/jpeg"
 	"io/ioutil"
 	"log"
+	"net/http"
 	"sync"
 	"time"
 
 	"github.com/blackjack/webcam"
-	"github.com/valyala/fasthttp"
+	//	"github.com/gobwas/ws"
+	//	"github.com/gobwas/ws/wsutil"
 	"gopkg.in/yaml.v2"
 )
 
@@ -19,7 +21,6 @@ const webcamDevicePath = "/dev/video0"
 var (
 	camera          *webcam.Webcam
 	config          Config
-	htmlIndex       []byte
 	latestPicture   []byte
 	pictureMutex    = &sync.RWMutex{}
 	lastRequestChan chan bool
@@ -43,7 +44,7 @@ func main() {
 	}
 	log.Printf("config:\n%#v\n", config)
 
-	htmlIndex, err = ioutil.ReadFile("index.html")
+	htmlIndex, err := ioutil.ReadFile("index.html")
 	if err != nil {
 		panic(err)
 	}
@@ -52,39 +53,31 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
+	defer camera.Close()
 	dumpWebcamFormats()
 
 	lastRequestChan = make(chan bool, 20)
 	go takePictures()
 
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Write(htmlIndex)
+	})
+	mux.HandleFunc("/latest.jpeg", picHandler)
+
 	log.Println("Listening on :8080")
-	log.Fatal(fasthttp.ListenAndServe(":8080", httpRouter))
+	log.Fatal(http.ListenAndServe(":8080", mux))
 }
 
-func httpRouter(ctx *fasthttp.RequestCtx) {
-	switch string(ctx.Path()) {
-	case "/":
-		ctx.SetStatusCode(fasthttp.StatusOK)
-		ctx.SetContentType("text/html")
-		ctx.SetBody(htmlIndex)
-	case "/latest.jpeg":
-		picHandler(ctx)
-	default:
-		ctx.SetStatusCode(fasthttp.StatusNotFound)
-		ctx.SetBodyString("not found")
-	}
-}
-
-func picHandler(ctx *fasthttp.RequestCtx) {
-	ctx.SetContentType("image/jpeg")
+func picHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "image/jpeg")
 
 	pictureMutex.RLock()
 	reqPic := make([]byte, len(latestPicture))
 	copy(reqPic, latestPicture)
 	pictureMutex.RUnlock()
 
-	ctx.SetBody(reqPic)
+	w.Write(reqPic)
 
 	lastRequestChan <- true
 
@@ -174,9 +167,6 @@ func openCamera() (err error) {
 		return
 	}
 	err = camera.SetAutoWhiteBalance(true)
-	if err != nil {
-		return
-	}
 	return
 }
 
@@ -191,9 +181,10 @@ func dumpWebcamFormats() {
 
 func frameToYCbCr(frame *[]byte) image.Image {
 	yuyv := image.NewYCbCr(image.Rect(0, 0, config.Width, config.Height), image.YCbCrSubsampleRatio422)
+	frameLength := len(*frame)
 	for i := range yuyv.Cb {
 		ii := i * 4
-		if ii+3 >= len(*frame) {
+		if ii+3 >= frameLength {
 			break
 		}
 		yuyv.Y[i*2] = (*frame)[ii]
