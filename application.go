@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"fmt"
 	"image"
 	"image/jpeg"
 	"io/ioutil"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/blackjack/webcam"
+	"github.com/getsentry/raven-go"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
 	"gopkg.in/yaml.v2"
@@ -57,7 +59,7 @@ func main() {
 	defer camera.Close()
 	dumpWebcamFormats()
 
-	newConnChan = make(chan client, 20)
+	newConnChan = make(chan client, 10)
 	go takePictures()
 
 	mux := http.NewServeMux()
@@ -65,6 +67,7 @@ func main() {
 		htmlIndex, err := ioutil.ReadFile("index.html")
 		if err != nil {
 			log.Println(err)
+			raven.CaptureError(err, nil)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -80,6 +83,8 @@ func main() {
 func wsHandler(w http.ResponseWriter, r *http.Request) {
 	conn, _, _, err := ws.UpgradeHTTP(r, w, nil)
 	if err != nil {
+		log.Println(err)
+		raven.CaptureError(err, nil)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -92,18 +97,19 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	newConnChan <- c
 
-	// TOD create another go routine to read incoming messages and
-	// add a case in the select below
 	go func() {
 		defer func() {
-			cancel()
-			c.conn.Close()
-			close(c.picChan)
+			log.Println("read websocket go routine closed")
 		}()
 		for {
 			select {
-			case pic := <-c.picChan:
-				err := wsutil.WriteServerMessage(conn, ws.OpText, pic)
+			case <-ctx.Done():
+				log.Println("read websocket go routine closed from ctx.Done()")
+				return
+			default:
+				msg, op, err := wsutil.ReadClientData(conn)
+				ravenMessage := fmt.Sprintf("msg: %#v, op: %#v, err: %#v", msg, op, err)
+				raven.CaptureMessage(ravenMessage, nil)
 				if err != nil {
 					log.Println(err)
 					return
@@ -112,30 +118,31 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	/*
-		go func() {
-			defer conn.Close()
-
-			for {
-				msg, op, err := wsutil.ReadClientData(conn)
-				if err != nil {
-					log.Println(err)
-				}
-				err = wsutil.WriteServerMessage(conn, op, msg)
-				if err != nil {
-					log.Println(err)
-				}
+	go func() {
+		var err error
+		defer func() {
+			if err != nil {
+				log.Println(err)
+				raven.CaptureError(err, nil)
 			}
+			cancel()
+			c.conn.Close()
+			close(c.picChan)
+			log.Println("write websocket go routine closed")
 		}()
-	*/
+		for {
+			pic := <-c.picChan
+			err = wsutil.WriteServerMessage(conn, ws.OpText, pic)
+			if err != nil {
+				return
+			}
+			log.Println("served somebody")
+		}
+	}()
 }
 
 func takePictures() {
-	var frame []byte
 	var base64image bytes.Buffer
-	var rawImage image.Image
-	var start time.Time
-	var err error
 	var streaming bool
 	clients := map[net.Conn]client{}
 
@@ -146,47 +153,51 @@ func takePictures() {
 		default:
 			if len(clients) == 0 {
 				if streaming {
-					err = camera.StopStreaming()
+					err := camera.StopStreaming()
 					if err != nil {
-						log.Println(err.Error())
+						log.Println(err)
+						raven.CaptureError(err, nil)
 					}
 					streaming = false
 				}
-				time.Sleep(500 * time.Millisecond)
+				time.Sleep(250 * time.Millisecond)
 				continue
 			}
 
 			if !streaming {
-				err = camera.StartStreaming()
+				err := camera.StartStreaming()
 				if err != nil {
-					log.Println("camera.StartStreaming(): ", err)
+					log.Println(err)
 					continue
 				}
 				streaming = true
 			}
-			start = time.Now()
-			err = camera.WaitForFrame(1)
+			start := time.Now()
+			err := camera.WaitForFrame(1)
 			if err != nil {
 				switch err.(type) {
 				case *webcam.Timeout:
 				default:
-					log.Println(err.Error())
+					log.Println(err)
+					raven.CaptureError(err, nil)
 				}
 				continue
 			}
 
-			frame, err = camera.ReadFrame()
+			frame, err := camera.ReadFrame()
 			if err != nil {
-				log.Println(err.Error())
+				log.Println(err)
+				raven.CaptureError(err, nil)
 				continue
 			}
 
-			rawImage = frameToYCbCr(&frame)
+			rawImage := frameToYCbCr(&frame)
 
 			base64Encoder := base64.NewEncoder(base64.StdEncoding, &base64image)
 			err = jpeg.Encode(base64Encoder, rawImage, nil)
 			if err != nil {
-				log.Println(err.Error())
+				log.Println(err)
+				raven.CaptureError(err, nil)
 				base64image.Reset()
 				continue
 			}
