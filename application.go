@@ -17,6 +17,7 @@ import (
 const webcamDevicePath = "/dev/video0"
 
 var (
+	camera          *webcam.Webcam
 	config          Config
 	htmlIndex       []byte
 	latestPicture   []byte
@@ -31,8 +32,7 @@ type Config struct {
 }
 
 func main() {
-	dumpWebcamFormats()
-
+	// read and parse config
 	rawConfig, err := ioutil.ReadFile("config.yaml")
 	if err != nil {
 		panic(err)
@@ -41,11 +41,19 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	log.Printf("config:\n%#v\n", config)
 
 	htmlIndex, err = ioutil.ReadFile("index.html")
 	if err != nil {
 		panic(err)
 	}
+
+	err = openCamera()
+	if err != nil {
+		panic(err)
+	}
+
+	dumpWebcamFormats()
 
 	lastRequestChan = make(chan bool, 20)
 	go takePictures()
@@ -89,12 +97,8 @@ func takePictures() {
 	var rawImage image.Image
 	var start time.Time
 	lastRequest := time.Now()
-	var camera *webcam.Webcam
-	picTimeout := uint32(2)
 	var err error
 	var streaming bool
-
-	log.Printf(" config: %#v\n", config)
 
 	for {
 		select {
@@ -103,13 +107,9 @@ func takePictures() {
 		default:
 			if !lastRequest.Add(5 * time.Second).After(time.Now()) {
 				if streaming {
-					if camera != nil {
-						err = camera.StopStreaming()
-						if err != nil {
-							log.Println(err.Error())
-							camera.Close()
-							camera = nil
-						}
+					err = camera.StopStreaming()
+					if err != nil {
+						log.Println(err.Error())
 					}
 					streaming = false
 				}
@@ -118,35 +118,23 @@ func takePictures() {
 			}
 
 			pictureMutex.Lock()
-			if camera == nil {
-				camera, err = openCamera()
-				if err != nil {
-					log.Println("openCamera(): ", err.Error())
-					pictureMutex.Unlock()
-					continue
-				}
-			}
 			if !streaming {
 				err = camera.StartStreaming()
 				if err != nil {
 					log.Println("camera.StartStreaming(): ", err)
-					camera.Close()
-					camera = nil
 					pictureMutex.Unlock()
 					continue
 				}
 				streaming = true
 			}
 			start = time.Now()
-			err = camera.WaitForFrame(picTimeout)
+			err = camera.WaitForFrame(1)
 			if err != nil {
 				pictureMutex.Unlock()
 				switch err.(type) {
 				case *webcam.Timeout:
 				default:
 					log.Println(err.Error())
-					camera.Close()
-					camera = nil
 				}
 				continue
 			}
@@ -176,13 +164,7 @@ func takePictures() {
 	}
 }
 
-func openCamera() (camera *webcam.Webcam, err error) {
-	defer func() {
-		if err != nil && camera != nil {
-			camera.Close()
-			camera = nil
-		}
-	}()
+func openCamera() (err error) {
 	camera, err = webcam.Open(webcamDevicePath)
 	if err != nil {
 		return
@@ -195,20 +177,13 @@ func openCamera() (camera *webcam.Webcam, err error) {
 	if err != nil {
 		return
 	}
-	log.Println("camera opened")
 	return
 }
 
 func dumpWebcamFormats() {
-	cam, err := webcam.Open(webcamDevicePath)
-	if err != nil {
-		panic(err)
-	}
-	defer cam.Close()
-
-	for pf, info := range cam.GetSupportedFormats() {
+	for pf, info := range camera.GetSupportedFormats() {
 		log.Printf("\n\npixelFormat: %v %s, frame sizes:\n", pf, info)
-		for _, size := range cam.GetSupportedFrameSizes(pf) {
+		for _, size := range camera.GetSupportedFrameSizes(pf) {
 			log.Printf("%#v\n", size)
 		}
 	}
