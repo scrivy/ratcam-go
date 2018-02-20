@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"image"
 	"image/jpeg"
+	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -113,6 +114,11 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 					switch err.(type) {
 					case wsutil.ClosedError:
 						cancel()
+						return
+					}
+					switch err {
+					case io.EOF:
+						cancel()
 					default:
 						log.Println(err)
 						raven.CaptureError(err, nil)
@@ -128,17 +134,11 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 
 	// write websocket
 	go func() {
-		var err error
 		defer func() {
-			if err != nil {
-				log.Println(err)
-				raven.CaptureError(err, nil)
-			}
 			c.conn.Close()
 			close(c.picChan)
 			log.Println("write websocket go routine closed")
 		}()
-
 		for {
 			select {
 			case <-ctx.Done():
@@ -148,9 +148,15 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 					log.Println("dropping frame to get more recent pic")
 					continue
 				}
-				err = wsutil.WriteServerMessage(conn, ws.OpText, pic)
+				err := wsutil.WriteServerMessage(conn, ws.OpText, pic)
 				if err != nil {
 					cancel()
+					log.Println(err)
+					switch err.(type) {
+					case *net.OpError:
+					default:
+						raven.CaptureError(err, nil)
+					}
 					return
 				}
 				log.Println("served somebody")
