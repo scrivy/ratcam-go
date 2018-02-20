@@ -92,7 +92,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(context.Background())
 	c := client{
 		conn:    conn,
-		picChan: make(chan []byte, 5),
+		picChan: make(chan []byte, 2),
 		ctx:     ctx,
 	}
 	newConnChan <- c
@@ -225,7 +225,11 @@ func takePictures() {
 
 			for _, c := range clients {
 				if c.ctx.Err() == nil {
-					c.picChan <- latestPicture
+					if len(c.picChan) != cap(c.picChan) {
+						c.picChan <- latestPicture
+					} else {
+						log.Println("there's one in the chamber")
+					}
 				} else {
 					delete(clients, c.conn)
 				}
