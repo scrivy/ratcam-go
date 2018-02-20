@@ -92,11 +92,12 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(context.Background())
 	c := client{
 		conn:    conn,
-		picChan: make(chan []byte, 10),
+		picChan: make(chan []byte, 5),
 		ctx:     ctx,
 	}
 	newConnChan <- c
 
+	// read websocket
 	go func() {
 		defer func() {
 			log.Println("read websocket go routine closed")
@@ -108,16 +109,24 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			default:
 				msg, op, err := wsutil.ReadClientData(conn)
-				ravenMessage := fmt.Sprintf("msg: %#v, op: %#v, err: %#v", msg, op, err)
-				raven.CaptureMessage(ravenMessage, nil)
 				if err != nil {
-					log.Println(err)
+					switch err.(type) {
+					case wsutil.ClosedError:
+						cancel()
+					default:
+						log.Println(err)
+						raven.CaptureError(err, nil)
+					}
 					return
+				} else {
+					ravenMessage := fmt.Sprintf("msg: %#v, op: %#v, err: %#v", msg, op, err)
+					raven.CaptureMessage(ravenMessage, nil)
 				}
 			}
 		}
 	}()
 
+	// write websocket
 	go func() {
 		var err error
 		defer func() {
@@ -125,18 +134,27 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 				log.Println(err)
 				raven.CaptureError(err, nil)
 			}
-			cancel()
 			c.conn.Close()
 			close(c.picChan)
 			log.Println("write websocket go routine closed")
 		}()
+
 		for {
-			pic := <-c.picChan
-			err = wsutil.WriteServerMessage(conn, ws.OpText, pic)
-			if err != nil {
+			select {
+			case <-ctx.Done():
 				return
+			case pic := <-c.picChan:
+				if len(c.picChan) != 0 {
+					log.Println("dropping frame to get more recent pic")
+					continue
+				}
+				err = wsutil.WriteServerMessage(conn, ws.OpText, pic)
+				if err != nil {
+					cancel()
+					return
+				}
+				log.Println("served somebody")
 			}
-			log.Println("served somebody")
 		}
 	}()
 }
