@@ -12,6 +12,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	//	_ "net/http/pprof"
 	"time"
 
 	"github.com/blackjack/webcam"
@@ -42,6 +43,10 @@ type client struct {
 }
 
 func main() {
+	//	go func() {
+	//		log.Fatal(http.ListenAndServe("localhost:6060", nil))
+	//	}()
+
 	// read and parse config
 	rawConfig, err := ioutil.ReadFile("config.yaml")
 	if err != nil {
@@ -166,9 +171,11 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func takePictures() {
-	var base64image bytes.Buffer
 	var streaming bool
 	clients := map[net.Conn]client{}
+	jpegOptions := &jpeg.Options{
+		Quality: 50,
+	}
 
 	for {
 		select {
@@ -217,8 +224,10 @@ func takePictures() {
 
 			rawImage := frameToYCbCr(&frame)
 
+			var base64image bytes.Buffer
 			base64Encoder := base64.NewEncoder(base64.StdEncoding, &base64image)
-			err = jpeg.Encode(base64Encoder, rawImage, nil)
+
+			err = jpeg.Encode(base64Encoder, rawImage, jpegOptions)
 			if err != nil {
 				log.Println(err)
 				raven.CaptureError(err, nil)
@@ -241,7 +250,7 @@ func takePictures() {
 				}
 			}
 
-			log.Printf("captured image in %s", time.Since(start).String())
+			log.Printf("%d bytes, captured image in %s", len(latestPicture), time.Since(start).String())
 			base64image.Reset()
 		}
 	}
