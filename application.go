@@ -197,7 +197,6 @@ func takePictures() {
 				}
 				streaming = true
 			}
-			start := time.Now()
 			err := camera.WaitForFrame(1)
 			if err != nil {
 				switch err.(type) {
@@ -230,8 +229,6 @@ func takePictures() {
 					delete(clients, c.conn)
 				}
 			}
-
-			log.Printf("%d bytes, captured image in %s", len(base64image), time.Since(start).String())
 		}
 	}
 }
