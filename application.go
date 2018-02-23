@@ -1,18 +1,15 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
-	"image"
-	"image/jpeg"
 	"io"
 	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
-	//	_ "net/http/pprof"
+	_ "net/http/pprof"
 	"time"
 
 	"github.com/blackjack/webcam"
@@ -38,14 +35,14 @@ type Config struct {
 
 type client struct {
 	conn    net.Conn
-	picChan chan []byte
+	picChan chan *[]byte
 	ctx     context.Context
 }
 
 func main() {
-	//	go func() {
-	//		log.Fatal(http.ListenAndServe("localhost:6060", nil))
-	//	}()
+	go func() {
+		log.Fatal(http.ListenAndServe("localhost:6060", nil))
+	}()
 
 	// read and parse config
 	rawConfig, err := ioutil.ReadFile("config.yaml")
@@ -98,7 +95,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(context.Background())
 	c := client{
 		conn:    conn,
-		picChan: make(chan []byte, 2),
+		picChan: make(chan *[]byte, 2),
 		ctx:     ctx,
 	}
 	newConnChan <- c
@@ -153,7 +150,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 					log.Println("dropping frame to get more recent pic")
 					continue
 				}
-				err := wsutil.WriteServerMessage(conn, ws.OpText, pic)
+				err := wsutil.WriteServerMessage(conn, ws.OpText, *pic)
 				if err != nil {
 					cancel()
 					log.Println(err)
@@ -173,9 +170,6 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 func takePictures() {
 	var streaming bool
 	clients := map[net.Conn]client{}
-	jpegOptions := &jpeg.Options{
-		Quality: 50,
-	}
 
 	for {
 		select {
@@ -222,26 +216,13 @@ func takePictures() {
 				continue
 			}
 
-			rawImage := frameToYCbCr(&frame)
-
-			var base64image bytes.Buffer
-			base64Encoder := base64.NewEncoder(base64.StdEncoding, &base64image)
-
-			err = jpeg.Encode(base64Encoder, rawImage, jpegOptions)
-			if err != nil {
-				log.Println(err)
-				raven.CaptureError(err, nil)
-				base64image.Reset()
-				continue
-			}
-			base64Encoder.Close()
-
-			latestPicture := base64image.Bytes()
+			base64image := make([]byte, base64.StdEncoding.EncodedLen(len(frame)))
+			base64.StdEncoding.Encode(base64image, frame)
 
 			for _, c := range clients {
 				if c.ctx.Err() == nil {
 					if len(c.picChan) != cap(c.picChan) {
-						c.picChan <- latestPicture
+						c.picChan <- &base64image
 					} else {
 						log.Println("there's one in the chamber")
 					}
@@ -250,8 +231,7 @@ func takePictures() {
 				}
 			}
 
-			log.Printf("%d bytes, captured image in %s", len(latestPicture), time.Since(start).String())
-			base64image.Reset()
+			log.Printf("%d bytes, captured image in %s", len(base64image), time.Since(start).String())
 		}
 	}
 }
@@ -276,20 +256,4 @@ func dumpWebcamFormats() {
 			log.Printf("%#v\n", size)
 		}
 	}
-}
-
-func frameToYCbCr(frame *[]byte) image.Image {
-	yuyv := image.NewYCbCr(image.Rect(0, 0, config.Width, config.Height), image.YCbCrSubsampleRatio422)
-	frameLength := len(*frame)
-	for i := range yuyv.Cb {
-		ii := i * 4
-		if ii+3 >= frameLength {
-			break
-		}
-		yuyv.Y[i*2] = (*frame)[ii]
-		yuyv.Y[i*2+1] = (*frame)[ii+2]
-		yuyv.Cb[i] = (*frame)[ii+1]
-		yuyv.Cr[i] = (*frame)[ii+3]
-	}
-	return yuyv
 }
