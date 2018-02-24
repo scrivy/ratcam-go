@@ -2,9 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
-	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -21,11 +18,7 @@ import (
 
 const webcamDevicePath = "/dev/video0"
 
-var (
-	camera      *webcam.Webcam
-	config      Config
-	newConnChan chan client
-)
+var newConnChan = make(chan client, 10)
 
 type Config struct {
 	PixelFormat int
@@ -44,25 +37,6 @@ func main() {
 		log.Fatal(http.ListenAndServe("localhost:6060", nil))
 	}()
 
-	// read and parse config
-	rawConfig, err := ioutil.ReadFile("config.yaml")
-	if err != nil {
-		panic(err)
-	}
-	err = yaml.Unmarshal(rawConfig, &config)
-	if err != nil {
-		panic(err)
-	}
-	log.Printf("config:\n%#v\n", config)
-
-	err = openCamera()
-	if err != nil {
-		panic(err)
-	}
-	defer camera.Close()
-	dumpWebcamFormats()
-
-	newConnChan = make(chan client, 10)
 	go takePictures()
 
 	mux := http.NewServeMux()
@@ -103,6 +77,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	// read websocket
 	go func() {
 		defer func() {
+			cancel()
 			log.Println("read websocket go routine closed")
 		}()
 		for {
@@ -111,25 +86,19 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 				log.Println("read websocket go routine closed from ctx.Done()")
 				return
 			default:
-				msg, op, err := wsutil.ReadClientData(conn)
+				frame, err := ws.ReadFrame(conn)
 				if err != nil {
-					switch err.(type) {
-					case wsutil.ClosedError:
-						cancel()
-						return
-					}
-					switch err {
-					case io.EOF:
-						cancel()
-					default:
-						log.Println(err)
-						raven.CaptureError(err, nil)
-					}
+					log.Println("read websocket: ws.ReadFrame: ", err)
+					raven.CaptureError(err, nil)
 					return
-				} else {
-					ravenMessage := fmt.Sprintf("msg: %#v, op: %#v, err: %#v", msg, op, err)
-					raven.CaptureMessage(ravenMessage, nil)
 				}
+
+				if frame.Header.OpCode == ws.OpClose {
+					statusCode, reason := ws.ParseCloseFrameDataUnsafe(frame.Payload)
+					log.Printf("read websocket: received ws.OpClose: statusCode: %d, reason: %s\n", statusCode, reason)
+					return
+				}
+				log.Printf("read websocket: payload %s\n", frame.Payload)
 			}
 		}
 	}()
@@ -137,6 +106,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	// write websocket
 	go func() {
 		defer func() {
+			cancel()
 			c.conn.Close()
 			close(c.picChan)
 			log.Println("write websocket go routine closed")
@@ -150,9 +120,8 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 					log.Println("dropping frame to get more recent pic")
 					continue
 				}
-				err := wsutil.WriteServerMessage(conn, ws.OpText, *pic)
+				err := wsutil.WriteServerBinary(conn, *pic)
 				if err != nil {
-					cancel()
 					log.Println(err)
 					switch err.(type) {
 					case *net.OpError:
@@ -161,7 +130,6 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 					}
 					return
 				}
-				log.Println("served somebody")
 			}
 		}
 	}()
@@ -170,6 +138,40 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 func takePictures() {
 	var streaming bool
 	clients := map[net.Conn]client{}
+
+	// read and parse config
+	rawConfig, err := ioutil.ReadFile("config.yaml")
+	if err != nil {
+		panic(err)
+	}
+	var config Config
+	err = yaml.Unmarshal(rawConfig, &config)
+	if err != nil {
+		panic(err)
+	}
+	log.Printf("config:\n%#v\n", config)
+
+	// open camera
+	camera, err := webcam.Open(webcamDevicePath)
+	if err != nil {
+		panic(err)
+	}
+	// dump supported output formats
+	for pf, info := range camera.GetSupportedFormats() {
+		log.Printf("\n\npixelFormat: %v %s, frame sizes:\n", pf, info)
+		for _, size := range camera.GetSupportedFrameSizes(pf) {
+			log.Printf("%#v\n", size)
+		}
+	}
+	// set output format
+	_, _, _, err = camera.SetImageFormat(webcam.PixelFormat(config.PixelFormat), uint32(config.Width), uint32(config.Height))
+	if err != nil {
+		panic(err)
+	}
+	err = camera.SetAutoWhiteBalance(true)
+	if err != nil {
+		panic(err)
+	}
 
 	for {
 		select {
@@ -215,13 +217,10 @@ func takePictures() {
 				continue
 			}
 
-			base64image := make([]byte, base64.StdEncoding.EncodedLen(len(frame)))
-			base64.StdEncoding.Encode(base64image, frame)
-
 			for _, c := range clients {
 				if c.ctx.Err() == nil {
 					if len(c.picChan) != cap(c.picChan) {
-						c.picChan <- &base64image
+						c.picChan <- &frame
 					} else {
 						log.Println("there's one in the chamber")
 					}
@@ -229,28 +228,6 @@ func takePictures() {
 					delete(clients, c.conn)
 				}
 			}
-		}
-	}
-}
-
-func openCamera() (err error) {
-	camera, err = webcam.Open(webcamDevicePath)
-	if err != nil {
-		return
-	}
-	_, _, _, err = camera.SetImageFormat(webcam.PixelFormat(config.PixelFormat), uint32(config.Width), uint32(config.Height))
-	if err != nil {
-		return
-	}
-	err = camera.SetAutoWhiteBalance(true)
-	return
-}
-
-func dumpWebcamFormats() {
-	for pf, info := range camera.GetSupportedFormats() {
-		log.Printf("\n\npixelFormat: %v %s, frame sizes:\n", pf, info)
-		for _, size := range camera.GetSupportedFrameSizes(pf) {
-			log.Printf("%#v\n", size)
 		}
 	}
 }
