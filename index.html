@@ -23,8 +23,12 @@ Frame rate: <span id="framerate"></span>
 	})
 
 	socket.addEventListener('message', function (event) {
-		picEle.src = 'data:image/jpeg;base64,' + event.data
-		frameRate++
+		var reader = new FileReader()
+		reader.readAsDataURL(event.data)
+		reader.onloadend = function() {
+			picEle.src = reader.result
+			frameRate++
+		}
 	})
 
 	setInterval(function() {
