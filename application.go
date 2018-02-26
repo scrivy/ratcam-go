@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -89,7 +90,15 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 				frame, err := ws.ReadFrame(conn)
 				if err != nil {
 					log.Println("read websocket: ws.ReadFrame: ", err)
-					raven.CaptureError(err, nil)
+					if err != io.EOF {
+						raven.CaptureError(err, nil)
+						return
+					}
+					switch err.(type) {
+					case *net.OpError:
+					default:
+						raven.CaptureError(err, nil)
+					}
 					return
 				}
 
@@ -109,7 +118,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 			cancel()
 			c.conn.Close()
 			close(c.picChan)
-			log.Println("write websocket go routine closed")
+			log.Println("write websocket: go routine closed")
 		}()
 		for {
 			select {
@@ -117,12 +126,12 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			case pic := <-c.picChan:
 				if len(c.picChan) != 0 {
-					log.Println("dropping frame to get more recent pic")
+					log.Println("write websocket: dropping frame to get more recent pic")
 					continue
 				}
 				err := wsutil.WriteServerBinary(conn, *pic)
 				if err != nil {
-					log.Println(err)
+					log.Println("write websocket: ", err)
 					switch err.(type) {
 					case *net.OpError:
 					default:
