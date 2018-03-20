@@ -90,8 +90,12 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 				frame, err := ws.ReadFrame(conn)
 				if err != nil {
 					log.Println("read websocket: ws.ReadFrame: ", err)
-					if err != io.EOF {
-						raven.CaptureError(err, nil)
+					switch err {
+					case io.EOF:
+						return
+					}
+					switch err.Error() {
+					case "EOF":
 						return
 					}
 					switch err.(type) {
