@@ -129,8 +129,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 			case <-ctx.Done():
 				return
 			case pic := <-c.picChan:
-				if len(c.picChan) != 0 {
-					log.Println("write websocket: dropping frame to get more recent pic")
+				if len(c.picChan) != 0 { // dropping frame to get more recent pic
 					continue
 				}
 				err := wsutil.WriteServerBinary(conn, *pic)
@@ -234,8 +233,6 @@ func takePictures() {
 				if c.ctx.Err() == nil {
 					if len(c.picChan) != cap(c.picChan) {
 						c.picChan <- &frame
-					} else {
-						log.Println("there's one in the chamber")
 					}
 				} else {
 					delete(clients, c.conn)
