@@ -7,8 +7,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	_ "net/http/pprof"
-	"time"
 
 	"github.com/blackjack/webcam"
 	"github.com/getsentry/raven-go"
@@ -34,10 +32,6 @@ type client struct {
 }
 
 func main() {
-	go func() {
-		log.Fatal(http.ListenAndServe("localhost:6060", nil))
-	}()
-
 	go takePictures()
 
 	mux := http.NewServeMux()
@@ -59,7 +53,7 @@ func main() {
 }
 
 func wsHandler(w http.ResponseWriter, r *http.Request) {
-	conn, _, _, err := ws.UpgradeHTTP(r, w, nil)
+	conn, _, _, err := ws.UpgradeHTTP(r, w)
 	if err != nil {
 		log.Println(err)
 		raven.CaptureError(err, nil)
@@ -186,57 +180,54 @@ func takePictures() {
 	}
 
 	for {
-		select {
-		case c := <-newConnChan:
-			clients[c.conn] = c
-		default:
-			if len(clients) == 0 {
-				if streaming {
-					err := camera.StopStreaming()
-					if err != nil {
-						log.Println(err)
-						raven.CaptureError(err, nil)
-					}
-					streaming = false
-				}
-				time.Sleep(250 * time.Millisecond)
-				continue
-			}
-
-			if !streaming {
-				err := camera.StartStreaming()
+		if len(clients) == 0 {
+			if streaming {
+				err := camera.StopStreaming()
 				if err != nil {
-					log.Println(err)
-					continue
-				}
-				streaming = true
-			}
-			err := camera.WaitForFrame(1)
-			if err != nil {
-				switch err.(type) {
-				case *webcam.Timeout:
-				default:
 					log.Println(err)
 					raven.CaptureError(err, nil)
 				}
-				continue
+				streaming = false
 			}
 
-			frame, err := camera.ReadFrame()
+			// wait for a new connection
+			c := <-newConnChan
+			clients[c.conn] = c
+		}
+
+		if !streaming {
+			err := camera.StartStreaming()
 			if err != nil {
 				log.Println(err)
-				raven.CaptureError(err, nil)
 				continue
 			}
+			streaming = true
+		}
+		err := camera.WaitForFrame(1)
+		if err != nil {
+			switch err.(type) {
+			case *webcam.Timeout:
+			default:
+				log.Println(err)
+				raven.CaptureError(err, nil)
+			}
+			continue
+		}
 
-			for _, c := range clients {
-				if c.ctx.Err() == nil {
-					if len(c.picChan) != cap(c.picChan) {
-						c.picChan <- &frame
-					}
-				} else {
-					delete(clients, c.conn)
+		frame, err := camera.ReadFrame()
+		if err != nil {
+			log.Println(err)
+			raven.CaptureError(err, nil)
+			continue
+		}
+
+		for _, c := range clients {
+			if c.ctx.Err() == nil {
+				if len(c.picChan) != cap(c.picChan) {
+					c.picChan <- &frame
 				}
+			} else {
+				delete(clients, c.conn)
 			}
 		}
 	}
