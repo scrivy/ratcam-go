@@ -1,0 +1,12 @@
+[Unit]
+Description=ratcam
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=5s
+ExecStart=/home/pi/go/src/ratcam-go/ratcam-go
+
+[Install]
+WantedBy=multi-user.target
+
