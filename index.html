@@ -22,12 +22,21 @@ Frame rate: <span id="framerate"></span>
 		console.log('websocket opened')
 	})
 
+	var running = false
 	socket.addEventListener('message', function (event) {
-		var reader = new FileReader()
-		reader.readAsDataURL(event.data)
-		reader.onloadend = function() {
-			picEle.src = reader.result
-			frameRate++
+		if (!running) {
+			running = true
+			requestAnimationFrame(function() {
+				var reader = new FileReader()
+				reader.readAsDataURL(event.data)
+				reader.onloadend = function() {
+					picEle.src = reader.result
+					frameRate++
+				}
+				running = false
+			})
+		} else {
+			frameRateEle.textContent = 'skipping frame'
 		}
 	})
 
