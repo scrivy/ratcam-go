@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+        "os"
 
 	"github.com/blackjack/webcam"
 	"github.com/getsentry/raven-go"
@@ -36,7 +37,11 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		htmlIndex, err := ioutil.ReadFile("index.html")
+		pwd, err := os.Getwd()
+		if err != nil {
+		        panic(err)
+		}
+		htmlIndex, err := ioutil.ReadFile(pwd + "/index.html")
 		if err != nil {
 			log.Println(err)
 			raven.CaptureError(err, nil)
@@ -146,7 +151,11 @@ func takePictures() {
 	clients := map[net.Conn]client{}
 
 	// read and parse config
-	rawConfig, err := ioutil.ReadFile("config.yaml")
+	pwd, err := os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+	rawConfig, err := ioutil.ReadFile(pwd + "/config.yaml")
 	if err != nil {
 		panic(err)
 	}
