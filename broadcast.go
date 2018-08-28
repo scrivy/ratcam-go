@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"encoding/gob"
 	"fmt"
@@ -53,9 +52,7 @@ func dialAndReceiveFrames() {
 	var connected bool
 	var conn net.Conn
 	var err error
-	var r *bufio.Reader
 	var decoder *gob.Decoder
-	var frame []byte
 
 	for {
 		select {
@@ -75,8 +72,7 @@ func dialAndReceiveFrames() {
 					fmt.Printf("%+v\n", errors.WithStack(err))
 					continue
 				}
-				r = bufio.NewReaderSize(conn, 200000)
-				decoder = gob.NewDecoder(r)
+				decoder = gob.NewDecoder(conn)
 				connected = true
 			} else if connected && len(clients) == 0 {
 				conn.Close()
@@ -85,6 +81,7 @@ func dialAndReceiveFrames() {
 				continue
 			}
 
+			frame := make([]byte, 100000)
 			err = decoder.Decode(&frame)
 			if err != nil {
 				fmt.Printf("%+v\n", errors.WithStack(err))
@@ -92,6 +89,7 @@ func dialAndReceiveFrames() {
 				connected = false
 				continue
 			}
+
 			for _, c := range clients {
 				if c.ctx.Err() == nil {
 					if len(c.picChan) != cap(c.picChan) {

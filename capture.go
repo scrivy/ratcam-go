@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"encoding/gob"
 	"fmt"
 	"log"
@@ -11,7 +10,6 @@ import (
 	"github.com/getsentry/raven-go"
 	"github.com/pkg/errors"
 )
-
 
 const webcamDevicePath = "/dev/video0"
 
@@ -77,8 +75,7 @@ func sendFrames(conn net.Conn) {
 	}
 	log.Println("streaming")
 
-	w := bufio.NewWriterSize(conn, 200000)
-	encoder := gob.NewEncoder(w)
+	encoder := gob.NewEncoder(conn)
 
 	for {
 		err := camera.WaitForFrame(1)
