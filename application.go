@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 
 	"gopkg.in/yaml.v2"
@@ -13,7 +15,7 @@ type Config struct {
 	PixelFormat int
 	Width       int
 	Height      int
-	CameraAddr string
+	CameraAddr  string
 }
 
 var config Config
@@ -25,6 +27,10 @@ func help() {
 }
 
 func main() {
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
+
 	// read and parse config
 	rawConfig, err := ioutil.ReadFile("config.yaml")
 	if err != nil {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/gob"
 	"fmt"
 	"log"
@@ -52,12 +53,19 @@ func capture() {
 			fmt.Printf("%+v\n", errors.WithStack(err))
 			continue
 		}
-		sendFrames(conn)
+		getAndSendFrames(conn)
 	}
 }
 
-func sendFrames(conn net.Conn) {
+func getAndSendFrames(conn net.Conn) {
+	ctx, cancel := context.WithCancel(context.Background())
+	queueFrames := make(chan *[]byte, 4)
+
+	go sendFrames(ctx, conn, queueFrames, cancel)
+
 	defer func() {
+		cancel()
+		close(queueFrames)
 		err := camera.StopStreaming()
 		if err != nil {
 			fmt.Printf("%+v\n", errors.WithStack(err))
@@ -75,33 +83,52 @@ func sendFrames(conn net.Conn) {
 	}
 	log.Println("streaming")
 
-	encoder := gob.NewEncoder(conn)
-
 	for {
-		err := camera.WaitForFrame(1)
-		if err != nil {
-			switch err.(type) {
-			case *webcam.Timeout:
-			default:
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			err := camera.WaitForFrame(1)
+			if err != nil {
+				switch err.(type) {
+				case *webcam.Timeout:
+				default:
+					fmt.Printf("%+v\n", errors.WithStack(err))
+					raven.CaptureError(err, nil)
+				}
+				return
+			}
+
+			frame, err := camera.ReadFrame()
+			if err != nil {
 				fmt.Printf("%+v\n", errors.WithStack(err))
 				raven.CaptureError(err, nil)
+				return
 			}
-			return
-		}
 
-		frame, err := camera.ReadFrame()
-		if err != nil {
-			fmt.Printf("%+v\n", errors.WithStack(err))
-			raven.CaptureError(err, nil)
-			return
+			queueFrames <- &frame
 		}
-
-		err = encoder.Encode(frame)
-		if err != nil {
-			fmt.Printf("%+v\n", errors.WithStack(err))
-			raven.CaptureError(err, nil)
-			return
-		}
-
 	}
+}
+
+func sendFrames(ctx context.Context, conn net.Conn, queueFrames chan *[]byte, cancel context.CancelFunc) {
+	defer cancel()
+
+	encoder := gob.NewEncoder(conn)
+
+	var err error
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case frame := <-queueFrames:
+			err = encoder.Encode(*frame)
+			if err != nil {
+				fmt.Printf("%+v\n", errors.WithStack(err))
+				raven.CaptureError(err, nil)
+				return
+			}
+		}
+	}
+
 }
