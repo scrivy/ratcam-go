@@ -59,7 +59,7 @@ func capture() {
 
 func getAndSendFrames(conn net.Conn) {
 	ctx, cancel := context.WithCancel(context.Background())
-	queueFrames := make(chan *[]byte, 4)
+	queueFrames := make(chan *[]byte, 1)
 
 	go sendFrames(ctx, conn, queueFrames, cancel)
 
@@ -105,8 +105,9 @@ func getAndSendFrames(conn net.Conn) {
 				raven.CaptureError(err, nil)
 				return
 			}
-
-			queueFrames <- &frame
+			if len(queueFrames) < cap(queueFrames) {
+				queueFrames <- &frame
+			}
 		}
 	}
 }

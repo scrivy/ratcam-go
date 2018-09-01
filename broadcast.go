@@ -92,7 +92,7 @@ func dialAndReceiveFrames() {
 
 			for _, c := range clients {
 				if c.ctx.Err() == nil {
-					if len(c.picChan) != cap(c.picChan) {
+					if len(c.picChan) < cap(c.picChan) {
 						c.picChan <- frame
 					}
 				} else {
