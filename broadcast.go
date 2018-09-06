@@ -81,7 +81,7 @@ func dialAndReceiveFrames() {
 				continue
 			}
 
-			frame := make([]byte, 100000)
+			frame := make([]byte, 256000)
 			err = decoder.Decode(&frame)
 			if err != nil {
 				fmt.Printf("%+v\n", errors.WithStack(err))
@@ -115,7 +115,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(context.Background())
 	c := client{
 		conn:    conn,
-		picChan: make(chan []byte, 2),
+		picChan: make(chan []byte, 1),
 		ctx:     ctx,
 	}
 	newConnChan <- c
