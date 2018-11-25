@@ -15,6 +15,7 @@ Frame rate: <span id="framerate"></span>
 	var picEle = document.getElementById("pic")
 	var frameRateEle = document.getElementById("framerate")
 	var frameRate = 0
+	var receivedFrames = 0
 
 	const socket = new WebSocket('ws://' + window.location.host + '/ws')
 
@@ -24,6 +25,7 @@ Frame rate: <span id="framerate"></span>
 
 	var running = false
 	socket.addEventListener('message', function (event) {
+		receivedFrames++
 		if (!running) {
 			running = true
 			requestAnimationFrame(function() {
@@ -35,14 +37,13 @@ Frame rate: <span id="framerate"></span>
 				}
 				running = false
 			})
-		} else {
-			frameRateEle.textContent = 'skipping frame'
 		}
 	})
 
 	setInterval(function() {
-		frameRateEle.textContent = frameRate
+		frameRateEle.textContent = frameRate.toString() + ", dropped: " + (receivedFrames - frameRate).toString()
 		frameRate = 0
+		receivedFrames = 0
 	}, 1000)
 </script>
 </body>
