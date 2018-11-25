@@ -21,9 +21,13 @@ type Config struct {
 var config Config
 
 func help() {
-	fmt.Println()
-	fmt.Println("capture")
-	fmt.Println("broadcast")
+	fmt.Printf(`
+cli help
+
+broadcast
+capture
+
+`)
 }
 
 func main() {
@@ -40,12 +44,17 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	log.Printf("config:\n%#v\n", config)
+	fmt.Printf("%#v\n", config)
 
+	// run both in the same process, default to localhost
 	if len(os.Args) < 2 {
-		help()
-		os.Exit(1)
+		config.CameraAddr = "127.0.0.1:5005"
+		go broadcast()
+		capture()
+		return
 	}
+
+	// split the service into 2 nodes
 	switch os.Args[1] {
 	case "capture":
 		capture()
@@ -53,6 +62,5 @@ func main() {
 		broadcast()
 	default:
 		help()
-		os.Exit(1)
 	}
 }

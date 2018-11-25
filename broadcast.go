@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/gob"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -11,7 +10,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/getsentry/raven-go"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
 	"github.com/pkg/errors"
@@ -34,7 +32,6 @@ func broadcast() {
 		htmlIndex, err := ioutil.ReadFile("index.html")
 		if err != nil {
 			log.Println(err)
-			raven.CaptureError(err, nil)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -69,7 +66,7 @@ func dialAndReceiveFrames() {
 
 				conn, err = net.DialTimeout("tcp", config.CameraAddr, 5*time.Second)
 				if err != nil {
-					fmt.Printf("%+v\n", errors.WithStack(err))
+					log.Printf("%+v\n", errors.WithStack(err))
 					continue
 				}
 				decoder = gob.NewDecoder(conn)
@@ -84,7 +81,7 @@ func dialAndReceiveFrames() {
 			frame := make([]byte, 256000)
 			err = decoder.Decode(&frame)
 			if err != nil {
-				fmt.Printf("%+v\n", errors.WithStack(err))
+				log.Printf("%+v\n", errors.WithStack(err))
 				conn.Close()
 				connected = false
 				continue
@@ -106,8 +103,7 @@ func dialAndReceiveFrames() {
 func wsHandler(w http.ResponseWriter, r *http.Request) {
 	conn, _, _, err := ws.UpgradeHTTP(r, w)
 	if err != nil {
-		log.Println(err)
-		raven.CaptureError(err, nil)
+		log.Printf("%+v\n", errors.WithStack(err))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -134,7 +130,6 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 			default:
 				frame, err := ws.ReadFrame(conn)
 				if err != nil {
-					log.Println("read websocket: ws.ReadFrame: ", err)
 					switch err {
 					case io.EOF:
 						return
@@ -146,7 +141,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 					switch err.(type) {
 					case *net.OpError:
 					default:
-						raven.CaptureError(err, nil)
+						log.Printf("%+v\n", errors.WithStack(err))
 					}
 					return
 				}
@@ -179,11 +174,10 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 				}
 				err := wsutil.WriteServerBinary(conn, pic)
 				if err != nil {
-					log.Println("write websocket: ", err)
 					switch err.(type) {
 					case *net.OpError:
 					default:
-						raven.CaptureError(err, nil)
+						log.Printf("%+v\n", errors.WithStack(err))
 					}
 					return
 				}

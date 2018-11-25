@@ -3,12 +3,10 @@ package main
 import (
 	"context"
 	"encoding/gob"
-	"fmt"
 	"log"
 	"net"
 
 	"github.com/blackjack/webcam"
-	"github.com/getsentry/raven-go"
 	"github.com/pkg/errors"
 )
 
@@ -50,7 +48,7 @@ func capture() {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			fmt.Printf("%+v\n", errors.WithStack(err))
+			log.Printf("%+v\n", errors.WithStack(err))
 			continue
 		}
 		getAndSendFrames(conn)
@@ -68,8 +66,7 @@ func getAndSendFrames(conn net.Conn) {
 		close(queueFrames)
 		err := camera.StopStreaming()
 		if err != nil {
-			fmt.Printf("%+v\n", errors.WithStack(err))
-			raven.CaptureError(err, nil)
+			log.Printf("%+v\n", errors.WithStack(err))
 		}
 		conn.Close()
 		log.Println("stopped streaming")
@@ -77,8 +74,7 @@ func getAndSendFrames(conn net.Conn) {
 
 	err := camera.StartStreaming()
 	if err != nil {
-		fmt.Printf("%+v\n", errors.WithStack(err))
-		raven.CaptureError(err, nil)
+		log.Printf("%+v\n", errors.WithStack(err))
 		return
 	}
 	log.Println("streaming")
@@ -93,16 +89,14 @@ func getAndSendFrames(conn net.Conn) {
 				switch err.(type) {
 				case *webcam.Timeout:
 				default:
-					fmt.Printf("%+v\n", errors.WithStack(err))
-					raven.CaptureError(err, nil)
+					log.Printf("%+v\n", errors.WithStack(err))
 				}
 				return
 			}
 
 			frame, err := camera.ReadFrame()
 			if err != nil {
-				fmt.Printf("%+v\n", errors.WithStack(err))
-				raven.CaptureError(err, nil)
+				log.Printf("%+v\n", errors.WithStack(err))
 				return
 			}
 			if len(queueFrames) < cap(queueFrames) {
@@ -125,8 +119,7 @@ func sendFrames(ctx context.Context, conn net.Conn, queueFrames chan *[]byte, ca
 		case frame := <-queueFrames:
 			err = encoder.Encode(*frame)
 			if err != nil {
-				fmt.Printf("%+v\n", errors.WithStack(err))
-				raven.CaptureError(err, nil)
+				log.Printf("%+v\n", errors.WithStack(err))
 				return
 			}
 		}

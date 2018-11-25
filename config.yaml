@@ -1,5 +1,5 @@
 ---
 pixelformat: 1196444237
-width: 1920
-height: 1080
-cameraaddr: "localhost:5005"
+width: 1280
+height: 720
+cameraaddr: "127.0.0.1:5005"
