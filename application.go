@@ -36,7 +36,11 @@ func main() {
 	}()
 
 	// read and parse config
-	rawConfig, err := ioutil.ReadFile("config.yaml")
+	pwd, err := os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+	rawConfig, err := ioutil.ReadFile(pwd + "/config.yaml")
 	if err != nil {
 		panic(err)
 	}

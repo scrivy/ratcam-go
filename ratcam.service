@@ -2,6 +2,7 @@
 Description=ratcam
 
 [Service]
+WorkingDirectory=/home/pi/go/src/ratcam-go
 Type=simple
 Restart=always
 RestartSec=5s
