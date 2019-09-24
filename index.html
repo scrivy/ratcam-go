@@ -25,6 +25,14 @@ Frame rate: <span id="framerate"></span>
 
 	var running = false
 	socket.addEventListener('message', function (event) {
+		// redirect to local address
+		if (typeof event.data === "string") {
+			clearInterval(intervalID)
+			socket.close()
+			window.location.href = event.data
+			return
+		}
+
 		receivedFrames++
 		if (!running) {
 			running = true
@@ -40,7 +48,7 @@ Frame rate: <span id="framerate"></span>
 		}
 	})
 
-	setInterval(function() {
+	var intervalID = setInterval(function() {
 		frameRateEle.textContent = frameRate.toString() + ", dropped: " + (receivedFrames - frameRate).toString()
 		frameRate = 0
 		receivedFrames = 0

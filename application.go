@@ -16,6 +16,8 @@ type Config struct {
 	Width       int
 	Height      int
 	CameraAddr  string
+	HomeIp      string
+	LocalAddr   string
 }
 
 var config Config

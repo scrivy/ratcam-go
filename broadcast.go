@@ -108,6 +108,13 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// forward to local address
+	if config.HomeIp != "" && r.Header.Get("X-Real-Ip") == config.HomeIp {
+		log.Println("redirecting to local network")
+		wsutil.WriteServerText(conn, []byte(config.LocalAddr))
+		return
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	c := client{
 		conn:    conn,
