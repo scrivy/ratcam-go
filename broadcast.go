@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gobwas/ws"
@@ -109,7 +110,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// forward to local address
-	if config.HomeIp != "" && r.Header.Get("X-Real-Ip") == config.HomeIp {
+	if config.HomeIp != "" && strings.HasPrefix(r.Header.Get("X-Real-Ip"), config.HomeIp) {
 		log.Println("redirecting to local network")
 		wsutil.WriteServerText(conn, []byte(config.LocalAddr))
 		return
