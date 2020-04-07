@@ -101,6 +101,8 @@ func getAndSendFrames(conn net.Conn) {
 			}
 			if len(queueFrames) < cap(queueFrames) {
 				queueFrames <- &frame
+			} else if DEBUG {
+				log.Println("queueFrames channel is full")
 			}
 		}
 	}
@@ -119,7 +121,9 @@ func sendFrames(ctx context.Context, conn net.Conn, queueFrames chan *[]byte, ca
 		case frame := <-queueFrames:
 			err = encoder.Encode(*frame)
 			if err != nil {
-				log.Printf("%+v\n", errors.WithStack(err))
+				if DEBUG {
+					log.Printf("%+v\n", errors.WithStack(err))
+				}
 				return
 			}
 		}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -20,17 +21,10 @@ type Config struct {
 	LocalAddr   string
 }
 
-var config Config
-
-func help() {
-	fmt.Printf(`
-cli help
-
-broadcast
-capture
-
-`)
-}
+var (
+	config Config
+	DEBUG  bool
+)
 
 func main() {
 	go func() {
@@ -52,21 +46,27 @@ func main() {
 	}
 	fmt.Printf("%#v\n", config)
 
-	// run both in the same process, default to localhost
-	if len(os.Args) < 2 {
-		config.CameraAddr = "127.0.0.1:5005"
-		go broadcast()
-		capture()
-		return
-	}
+	// cli flags
+	debug := flag.Bool("debug", false, "enables debug logging")
+	mode := flag.String("mode", "both", "capture or broadcast")
+	flag.Parse()
+	DEBUG = *debug
 
 	// split the service into 2 nodes
-	switch os.Args[1] {
+	switch *mode {
 	case "capture":
 		capture()
 	case "broadcast":
 		broadcast()
+	case "both":
+		// run both nodes in the same process, default to localhost
+		config.CameraAddr = "127.0.0.1:5005"
+		go broadcast()
+		capture()
 	default:
-		help()
+		fmt.Printf("Invalid mode: %s, help: -h\n", *mode)
+		flag.PrintDefaults()
+		os.Exit(1)
 	}
+	return
 }
