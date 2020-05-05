@@ -109,6 +109,13 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// get read ip if using nginx
+	realIP := r.Header.Get("X-Real-Ip")
+	if realIP == "" {
+		realIP = r.RemoteAddr
+	}
+	log.Println("accepted connection from", realIP)
+
 	// forward to local address
 	if config.HomeIp != "" && strings.HasPrefix(r.Header.Get("X-Real-Ip"), config.HomeIp) {
 		log.Println("redirecting to local network")
@@ -128,12 +135,16 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		defer func() {
 			cancel()
-			log.Println("read websocket go routine closed")
+			if DEBUG {
+				log.Println("read websocket go routine closed")
+			}
 		}()
 		for {
 			select {
 			case <-ctx.Done():
-				log.Println("read websocket go routine closed from ctx.Done()")
+				if DEBUG {
+					log.Println("read websocket go routine closed from ctx.Done()")
+				}
 				return
 			default:
 				frame, err := ws.ReadFrame(conn)
@@ -155,8 +166,10 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 				}
 
 				if frame.Header.OpCode == ws.OpClose {
-					statusCode, reason := ws.ParseCloseFrameDataUnsafe(frame.Payload)
-					log.Printf("read websocket: received ws.OpClose: statusCode: %d, reason: %s\n", statusCode, reason)
+					if DEBUG {
+						statusCode, reason := ws.ParseCloseFrameDataUnsafe(frame.Payload)
+						log.Printf("read websocket: received ws.OpClose: statusCode: %d, reason: %s\n", statusCode, reason)
+					}
 					return
 				}
 				log.Printf("read websocket: payload %s\n", frame.Payload)
@@ -170,7 +183,9 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 			cancel()
 			c.conn.Close()
 			close(c.picChan)
-			log.Println("write websocket: go routine closed")
+			if DEBUG {
+				log.Println("write websocket: go routine closed")
+			}
 		}()
 		for {
 			select {

@@ -21,13 +21,17 @@ func capture() {
 	if err != nil {
 		panic(err)
 	}
+
 	// dump supported output formats
-	for pf, info := range camera.GetSupportedFormats() {
-		log.Printf("\n\npixelFormat: %v %s, frame sizes:\n", pf, info)
-		for _, size := range camera.GetSupportedFrameSizes(pf) {
-			log.Printf("%#v\n", size)
+	if DEBUG {
+		for pf, info := range camera.GetSupportedFormats() {
+			log.Printf("\n\npixelFormat: %v %s, frame sizes:\n", pf, info)
+			for _, size := range camera.GetSupportedFrameSizes(pf) {
+				log.Printf("%#v\n", size)
+			}
 		}
 	}
+
 	// set output format
 	_, _, _, err = camera.SetImageFormat(webcam.PixelFormat(config.PixelFormat), uint32(config.Width), uint32(config.Height))
 	if err != nil {

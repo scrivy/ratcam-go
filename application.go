@@ -27,9 +27,18 @@ var (
 )
 
 func main() {
-	go func() {
-		log.Println(http.ListenAndServe("localhost:6060", nil))
-	}()
+	// cli flags
+	debug := flag.Bool("debug", false, "enables debug logging and profiling")
+	mode := flag.String("mode", "", "capture, broadcast, or both")
+	flag.Parse()
+	DEBUG = *debug
+
+	// for profiling
+	if DEBUG {
+		go func() {
+			log.Println(http.ListenAndServe("localhost:6060", nil))
+		}()
+	}
 
 	// read and parse config
 	pwd, err := os.Getwd()
@@ -44,13 +53,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("%#v\n", config)
-
-	// cli flags
-	debug := flag.Bool("debug", false, "enables debug logging")
-	mode := flag.String("mode", "both", "capture or broadcast")
-	flag.Parse()
-	DEBUG = *debug
+	if DEBUG {
+		fmt.Printf("%#v\n", config)
+	}
 
 	// split the service into 2 nodes
 	switch *mode {
@@ -64,7 +69,6 @@ func main() {
 		go broadcast()
 		capture()
 	default:
-		fmt.Printf("Invalid mode: %s, help: -h\n", *mode)
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
