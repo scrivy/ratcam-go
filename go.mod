@@ -8,6 +8,6 @@ require (
 	github.com/gobwas/pool v0.2.0 // indirect
 	github.com/gobwas/ws v1.0.3
 	github.com/pkg/errors v0.9.1
-	golang.org/x/sys v0.0.0-20200501145240-bc7a7d42d5c3 // indirect
-	gopkg.in/yaml.v2 v2.2.8
+	golang.org/x/sys v0.0.0-20200523222454-059865788121 // indirect
+	gopkg.in/yaml.v2 v2.3.0
 )
