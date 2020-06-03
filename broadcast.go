@@ -22,10 +22,18 @@ type client struct {
 	ctx     context.Context
 }
 
-var newConnChan chan client
+var (
+	newConnChan     chan client
+	askForStreaming chan struct{}
+	streaming       chan bool
+
+	empty struct{}
+)
 
 func broadcast() {
 	newConnChan = make(chan client, 10)
+	askForStreaming = make(chan struct{}, 10)
+	streaming = make(chan bool, 10)
 	go dialAndReceiveFrames()
 
 	mux := http.NewServeMux()
@@ -54,15 +62,16 @@ func dialAndReceiveFrames() {
 
 	for {
 		select {
+		case <-askForStreaming:
+			streaming <- connected
 		case c := <-newConnChan:
 			clients[c.conn] = c
 		default:
 			// dial if needed
 			if !connected {
-				if len(clients) == 0 { // block until new websocket
-					log.Println("waiting for new connection")
-					c := <-newConnChan
-					clients[c.conn] = c
+				if len(clients) == 0 {
+					time.Sleep(time.Second)
+					continue
 				}
 
 				conn, err = net.DialTimeout("tcp", config.CameraAddr, 5*time.Second)
@@ -116,8 +125,10 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Println("accepted connection from", realIP)
 
-	// forward to local address
-	if config.HomeIp != "" && strings.HasPrefix(r.Header.Get("X-Real-Ip"), config.HomeIp) {
+	// forward to local address if not currently streaming
+	askForStreaming <- empty
+	isStreaming := <-streaming
+	if !isStreaming && config.HomeIp != "" && strings.HasPrefix(r.Header.Get("X-Real-Ip"), config.HomeIp) {
 		log.Println("redirecting to local network")
 		wsutil.WriteServerText(conn, []byte(config.LocalAddr))
 		return
