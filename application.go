@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -13,6 +12,8 @@ import (
 )
 
 type Config struct {
+	Mode        string
+	Debug       bool
 	PixelFormat int
 	Width       int
 	Height      int
@@ -21,20 +22,11 @@ type Config struct {
 	LocalAddr   string
 }
 
-var (
-	config Config
-	DEBUG  bool
-)
+var config Config
 
 func main() {
-	// cli flags
-	debug := flag.Bool("debug", false, "enables debug logging and profiling")
-	mode := flag.String("mode", "", "capture, broadcast, or both")
-	flag.Parse()
-	DEBUG = *debug
-
 	// for profiling
-	if DEBUG {
+	if config.Debug {
 		go func() {
 			log.Println(http.ListenAndServe("localhost:6060", nil))
 		}()
@@ -48,12 +40,12 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	if DEBUG {
+	if config.Debug {
 		fmt.Printf("%#v\n", config)
 	}
 
 	// split the service into 2 nodes
-	switch *mode {
+	switch config.Mode {
 	case "capture":
 		capture()
 	case "broadcast":
@@ -64,7 +56,7 @@ func main() {
 		go broadcast()
 		capture()
 	default:
-		flag.PrintDefaults()
+		fmt.Printf("mode not supported. Is it set in the config yaml?")
 		os.Exit(1)
 	}
 	return

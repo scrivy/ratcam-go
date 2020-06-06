@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/ratcam -mode broadcast
+ExecStart=/usr/bin/ratcam
 
 [Install]
 WantedBy=multi-user.target

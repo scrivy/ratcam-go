@@ -23,7 +23,7 @@ func capture() {
 	}
 
 	// dump supported output formats
-	if DEBUG {
+	if config.Debug {
 		for pf, info := range camera.GetSupportedFormats() {
 			log.Printf("\n\npixelFormat: %v %s, frame sizes:\n", pf, info)
 			for _, size := range camera.GetSupportedFrameSizes(pf) {
@@ -105,7 +105,7 @@ func getAndSendFrames(conn net.Conn) {
 			}
 			if len(queueFrames) < cap(queueFrames) {
 				queueFrames <- &frame
-			} else if DEBUG {
+			} else if config.Debug {
 				log.Println("queueFrames channel is full")
 			}
 		}
@@ -125,7 +125,7 @@ func sendFrames(ctx context.Context, conn net.Conn, queueFrames chan *[]byte, ca
 		case frame := <-queueFrames:
 			err = encoder.Encode(*frame)
 			if err != nil {
-				if DEBUG {
+				if config.Debug {
 					log.Printf("%+v\n", errors.WithStack(err))
 				}
 				return
