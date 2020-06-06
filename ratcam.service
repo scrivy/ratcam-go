@@ -1,13 +1,10 @@
 [Unit]
-Description=ratcam
+Description=Ratcam
+After=network.target
 
 [Service]
-WorkingDirectory=/home/pi/go/src/ratcam-go
 Type=simple
-Restart=always
-RestartSec=5s
-ExecStart=/home/pi/go/src/ratcam-go/ratcam-go
+ExecStart=/usr/bin/ratcam -mode broadcast
 
 [Install]
 WantedBy=multi-user.target
-

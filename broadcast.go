@@ -38,7 +38,7 @@ func broadcast() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		htmlIndex, err := ioutil.ReadFile("index.html")
+		htmlIndex, err := ioutil.ReadFile("/usr/lib/ratcam/index.html")
 		if err != nil {
 			log.Println(err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)

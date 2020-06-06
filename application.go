@@ -40,12 +40,7 @@ func main() {
 		}()
 	}
 
-	// read and parse config
-	pwd, err := os.Getwd()
-	if err != nil {
-		panic(err)
-	}
-	rawConfig, err := ioutil.ReadFile(pwd + "/config.yaml")
+	rawConfig, err := ioutil.ReadFile("/etc/ratcam.yaml")
 	if err != nil {
 		panic(err)
 	}
