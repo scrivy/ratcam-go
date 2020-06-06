@@ -70,7 +70,7 @@ func dialAndReceiveFrames() {
 			// dial if needed
 			if !connected {
 				if len(clients) == 0 {
-					time.Sleep(time.Second)
+					time.Sleep(100 * time.Millisecond)
 					continue
 				}
 
