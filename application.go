@@ -12,14 +12,15 @@ import (
 )
 
 type Config struct {
-	Mode        string
-	Debug       bool
-	PixelFormat int
-	Width       int
-	Height      int
-	CameraAddr  string
-	HomeIp      string
-	LocalAddr   string
+	Mode                     string
+	Debug                    bool
+	PixelFormat              int
+	Width                    int
+	Height                   int
+	CameraAddr               string
+	HomeIp                   string
+	LocalAddr                string
+	MaxStreamDurationMinutes int
 }
 
 var config Config

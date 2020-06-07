@@ -134,7 +134,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(config.MaxStreamDurationMinutes)*time.Minute)
 	c := client{
 		conn:    conn,
 		picChan: make(chan []byte, 1),
