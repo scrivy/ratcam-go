@@ -74,7 +74,7 @@ func dialAndReceiveFrames() {
 					continue
 				}
 
-				conn, err = net.DialTimeout("tcp", config.CameraAddr, 5*time.Second)
+				conn, err = net.DialTimeout("tcp", config.CameraIP+":"+config.CameraPort, 5*time.Second)
 				if err != nil {
 					log.Printf("%+v\n", errors.WithStack(err))
 					continue
@@ -128,10 +128,12 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	// forward to local address if not currently streaming
 	askForStreaming <- empty
 	isStreaming := <-streaming
-	if !isStreaming && config.HomeIp != "" && strings.HasPrefix(r.Header.Get("X-Real-Ip"), config.HomeIp) {
-		log.Println("redirecting to local network")
-		wsutil.WriteServerText(conn, []byte(config.LocalAddr))
-		return
+	if !isStreaming && config.HomeIPv6 != "" {
+		if strings.HasPrefix(r.Header.Get("X-Real-Ip"), config.HomeIPv6) || (realIP == config.CameraIP && config.CameraIP != "127.0.0.1") {
+			log.Println("redirecting to local network")
+			wsutil.WriteServerText(conn, []byte(config.LocalAddr))
+			return
+		}
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(config.MaxStreamDurationMinutes)*time.Minute)

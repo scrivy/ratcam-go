@@ -17,8 +17,9 @@ type Config struct {
 	PixelFormat              int
 	Width                    int
 	Height                   int
-	CameraAddr               string
-	HomeIp                   string
+	CameraIP                 string
+	CameraPort               string
+	HomeIPv6                 string
 	LocalAddr                string
 	MaxStreamDurationMinutes int
 }
@@ -52,8 +53,7 @@ func main() {
 	case "broadcast":
 		broadcast()
 	case "both":
-		// run both nodes in the same process, default to localhost
-		config.CameraAddr = "127.0.0.1:5005"
+		// run both nodes in the same process
 		go broadcast()
 		capture()
 	default:
