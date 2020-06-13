@@ -6,6 +6,7 @@ width: 1280
 height: 720
 cameraip: "127.0.0.1"
 cameraport: "5005"
-homeipv6: "2602:645:4100:2349:6286:5c27:4765:6828"
+homeipv6: "2602:645:4100:2349:"
+redirect_to_local: false
 localaddr: "http://192.168.1.6:8080"
-maxstreamdurationminutes: 15
+max_stream_duration_minutes: 15

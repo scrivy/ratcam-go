@@ -1,8 +1,8 @@
 package main
 
 import (
+	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	_ "net/http/pprof"
@@ -20,13 +20,24 @@ type Config struct {
 	CameraIP                 string
 	CameraPort               string
 	HomeIPv6                 string
+	RedirectToLocal          bool `yaml:"redirect_to_local"`
 	LocalAddr                string
-	MaxStreamDurationMinutes int
+	MaxStreamDurationMinutes int `yaml:"max_stream_duration_minutes"`
 }
 
 var config Config
 
 func main() {
+	showHelp := flag.Bool("h", false, "show help")
+	configPath := flag.String("c", "./config.yaml", "config path")
+	indexHtmlPath := flag.String("htmlpath", "./index.html", "index.html path")
+	flag.Parse()
+
+	if *showHelp {
+		flag.PrintDefaults()
+		os.Exit(0)
+	}
+
 	// for profiling
 	if config.Debug {
 		go func() {
@@ -34,16 +45,19 @@ func main() {
 		}()
 	}
 
-	rawConfig, err := ioutil.ReadFile("/etc/ratcam.yaml")
+	// load config
+	configFile, err := os.Open(*configPath)
 	if err != nil {
 		panic(err)
 	}
-	err = yaml.Unmarshal(rawConfig, &config)
+	yamlDec := yaml.NewDecoder(configFile)
+	yamlDec.SetStrict(true)
+	err = yamlDec.Decode(&config)
 	if err != nil {
 		panic(err)
 	}
 	if config.Debug {
-		fmt.Printf("%#v\n", config)
+		fmt.Printf("config:\n%#v\n", config)
 	}
 
 	// split the service into 2 nodes
@@ -51,13 +65,13 @@ func main() {
 	case "capture":
 		capture()
 	case "broadcast":
-		broadcast()
+		broadcast(*indexHtmlPath)
 	case "both":
 		// run both nodes in the same process
-		go broadcast()
+		go broadcast(*indexHtmlPath)
 		capture()
 	default:
-		fmt.Printf("mode not supported. Is it set in the config yaml?")
+		fmt.Printf("mode not supported. both, capture, or broadcast. Is it set in the yaml config?")
 		os.Exit(1)
 	}
 	return

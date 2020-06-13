@@ -30,7 +30,7 @@ var (
 	empty struct{}
 )
 
-func broadcast() {
+func broadcast(indexHtmlPath string) {
 	newConnChan = make(chan client, 10)
 	askForStreaming = make(chan struct{}, 10)
 	streaming = make(chan bool, 10)
@@ -38,7 +38,7 @@ func broadcast() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		htmlIndex, err := ioutil.ReadFile("/usr/lib/ratcam/index.html")
+		htmlIndex, err := ioutil.ReadFile(indexHtmlPath)
 		if err != nil {
 			log.Println(err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -126,13 +126,15 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("accepted connection from", realIP)
 
 	// forward to local address if not currently streaming
-	askForStreaming <- empty
-	isStreaming := <-streaming
-	if !isStreaming && config.HomeIPv6 != "" {
-		if strings.HasPrefix(r.Header.Get("X-Real-Ip"), config.HomeIPv6) || (realIP == config.CameraIP && config.CameraIP != "127.0.0.1") {
-			log.Println("redirecting to local network")
-			wsutil.WriteServerText(conn, []byte(config.LocalAddr))
-			return
+	if config.RedirectToLocal {
+		askForStreaming <- empty
+		isStreaming := <-streaming
+		if !isStreaming && config.HomeIPv6 != "" {
+			if strings.HasPrefix(r.Header.Get("X-Real-Ip"), config.HomeIPv6) || (realIP == config.CameraIP && config.CameraIP != "127.0.0.1") {
+				log.Println("redirecting to local network")
+				wsutil.WriteServerText(conn, []byte(config.LocalAddr))
+				return
+			}
 		}
 	}
 

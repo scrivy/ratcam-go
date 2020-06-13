@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/ratcam
+ExecStart=/usr/local/bin/ratcam -c /etc/ratcam.yaml -htmlpath /usr/local/lib/ratcam/index.html
 
 [Install]
 WantedBy=multi-user.target
