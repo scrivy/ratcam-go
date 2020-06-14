@@ -43,7 +43,7 @@ func capture() {
 	}
 
 	// listen for incoming requests
-	listener, err := net.Listen("tcp", config.CameraIP+":"+config.CameraPort)
+	listener, err := net.Listen("tcp", ":"+config.CameraPort)
 	if err != nil {
 		panic(err)
 	}
