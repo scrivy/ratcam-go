@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"encoding/gob"
-	"log"
+	"fmt"
 	"net"
 
 	"github.com/blackjack/webcam"
@@ -25,9 +25,9 @@ func capture() {
 	// dump supported output formats
 	if config.Debug {
 		for pf, info := range camera.GetSupportedFormats() {
-			log.Printf("\n\npixelFormat: %v %s, frame sizes:\n", pf, info)
+			fmt.Printf("\n\npixelFormat: %v %s, frame sizes:\n", pf, info)
 			for _, size := range camera.GetSupportedFrameSizes(pf) {
-				log.Printf("%#v\n", size)
+				fmt.Printf("%#v\n", size)
 			}
 		}
 	}
@@ -52,7 +52,7 @@ func capture() {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			log.Printf("%+v\n", errors.WithStack(err))
+			fmt.Printf("%+v\n", errors.WithStack(err))
 			continue
 		}
 		getAndSendFrames(conn)
@@ -70,18 +70,18 @@ func getAndSendFrames(conn net.Conn) {
 		close(queueFrames)
 		err := camera.StopStreaming()
 		if err != nil {
-			log.Printf("%+v\n", errors.WithStack(err))
+			fmt.Printf("%+v\n", errors.WithStack(err))
 		}
 		conn.Close()
-		log.Println("stopped streaming")
+		fmt.Println("stopped streaming")
 	}()
 
 	err := camera.StartStreaming()
 	if err != nil {
-		log.Printf("%+v\n", errors.WithStack(err))
+		fmt.Printf("%+v\n", errors.WithStack(err))
 		return
 	}
-	log.Println("streaming")
+	fmt.Println("streaming")
 
 	for {
 		select {
@@ -93,20 +93,20 @@ func getAndSendFrames(conn net.Conn) {
 				switch err.(type) {
 				case *webcam.Timeout:
 				default:
-					log.Printf("%+v\n", errors.WithStack(err))
+					fmt.Printf("%+v\n", errors.WithStack(err))
 				}
 				return
 			}
 
 			frame, err := camera.ReadFrame()
 			if err != nil {
-				log.Printf("%+v\n", errors.WithStack(err))
+				fmt.Printf("%+v\n", errors.WithStack(err))
 				return
 			}
 			if len(queueFrames) < cap(queueFrames) {
 				queueFrames <- &frame
 			} else if config.Debug {
-				log.Println("queueFrames channel is full")
+				fmt.Println("queueFrames channel is full")
 			}
 		}
 	}
@@ -126,7 +126,7 @@ func sendFrames(ctx context.Context, conn net.Conn, queueFrames chan *[]byte, ca
 			err = encoder.Encode(*frame)
 			if err != nil {
 				if config.Debug {
-					log.Printf("%+v\n", errors.WithStack(err))
+					fmt.Printf("%+v\n", errors.WithStack(err))
 				}
 				return
 			}

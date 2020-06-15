@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -41,7 +40,7 @@ func main() {
 	// for profiling
 	if config.Debug {
 		go func() {
-			log.Println(http.ListenAndServe("localhost:6060", nil))
+			fmt.Println(http.ListenAndServe("localhost:6060", nil))
 		}()
 	}
 

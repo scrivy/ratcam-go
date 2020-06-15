@@ -3,11 +3,12 @@ package main
 import (
 	"context"
 	"encoding/gob"
+	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -40,7 +41,7 @@ func broadcast(indexHtmlPath string) {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		htmlIndex, err := ioutil.ReadFile(indexHtmlPath)
 		if err != nil {
-			log.Println(err)
+			fmt.Println(err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -49,8 +50,12 @@ func broadcast(indexHtmlPath string) {
 	})
 	mux.HandleFunc("/ws", wsHandler)
 
-	log.Println("Listening on :8080")
-	log.Fatal(http.ListenAndServe(":8080", mux))
+	fmt.Println("Listening on :8080")
+	err := http.ListenAndServe(":8080", mux)
+	if err != nil {
+		fmt.Printf("%+v\n", errors.WithStack(err))
+		os.Exit(1)
+	}
 }
 
 func dialAndReceiveFrames() {
@@ -76,7 +81,7 @@ func dialAndReceiveFrames() {
 
 				conn, err = net.DialTimeout("tcp", config.CameraIP+":"+config.CameraPort, 5*time.Second)
 				if err != nil {
-					log.Printf("%+v\n", errors.WithStack(err))
+					fmt.Printf("%+v\n", errors.WithStack(err))
 					continue
 				}
 				decoder = gob.NewDecoder(conn)
@@ -84,14 +89,14 @@ func dialAndReceiveFrames() {
 			} else if connected && len(clients) == 0 {
 				conn.Close()
 				connected = false
-				log.Println("disconnecting due to lack of clients")
+				fmt.Println("disconnecting due to lack of clients")
 				continue
 			}
 
 			frame := make([]byte, 256000)
 			err = decoder.Decode(&frame)
 			if err != nil {
-				log.Printf("%+v\n", errors.WithStack(err))
+				fmt.Printf("%+v\n", errors.WithStack(err))
 				conn.Close()
 				connected = false
 				continue
@@ -113,7 +118,7 @@ func dialAndReceiveFrames() {
 func wsHandler(w http.ResponseWriter, r *http.Request) {
 	conn, _, _, err := ws.UpgradeHTTP(r, w)
 	if err != nil {
-		log.Printf("%+v\n", errors.WithStack(err))
+		fmt.Printf("%+v\n", errors.WithStack(err))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -123,7 +128,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	if realIP == "" {
 		realIP = r.RemoteAddr
 	}
-	log.Println("accepted connection from", realIP)
+	fmt.Println("accepted connection from", realIP)
 
 	// forward to local address if not currently streaming
 	if config.RedirectToLocal {
@@ -131,7 +136,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		isStreaming := <-streaming
 		if !isStreaming && config.HomeIPv6 != "" {
 			if strings.HasPrefix(r.Header.Get("X-Real-Ip"), config.HomeIPv6) || (realIP == config.CameraIP && config.CameraIP != "127.0.0.1") {
-				log.Println("redirecting to local network")
+				fmt.Println("redirecting to local network")
 				wsutil.WriteServerText(conn, []byte(config.LocalAddr))
 				return
 			}
@@ -151,14 +156,14 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			cancel()
 			if config.Debug {
-				log.Println("read websocket go routine closed")
+				fmt.Println("read websocket go routine closed")
 			}
 		}()
 		for {
 			select {
 			case <-ctx.Done():
 				if config.Debug {
-					log.Println("read websocket go routine closed from ctx.Done()")
+					fmt.Println("read websocket go routine closed from ctx.Done()")
 				}
 				return
 			default:
@@ -175,7 +180,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 					switch err.(type) {
 					case *net.OpError:
 					default:
-						log.Printf("%+v\n", errors.WithStack(err))
+						fmt.Printf("%+v\n", errors.WithStack(err))
 					}
 					return
 				}
@@ -183,11 +188,11 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 				if frame.Header.OpCode == ws.OpClose {
 					if config.Debug {
 						statusCode, reason := ws.ParseCloseFrameDataUnsafe(frame.Payload)
-						log.Printf("read websocket: received ws.OpClose: statusCode: %d, reason: %s\n", statusCode, reason)
+						fmt.Printf("read websocket: received ws.OpClose: statusCode: %d, reason: %s\n", statusCode, reason)
 					}
 					return
 				}
-				log.Printf("read websocket: payload %s\n", frame.Payload)
+				fmt.Printf("read websocket: payload %s\n", frame.Payload)
 			}
 		}
 	}()
@@ -199,7 +204,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 			c.conn.Close()
 			close(c.picChan)
 			if config.Debug {
-				log.Println("write websocket: go routine closed")
+				fmt.Println("write websocket: go routine closed")
 			}
 		}()
 		for {
@@ -215,7 +220,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 					switch err.(type) {
 					case *net.OpError:
 					default:
-						log.Printf("%+v\n", errors.WithStack(err))
+						fmt.Printf("%+v\n", errors.WithStack(err))
 					}
 					return
 				}
