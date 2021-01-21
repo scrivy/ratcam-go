@@ -50,8 +50,8 @@ func broadcast(indexHtmlPath string) {
 	})
 	mux.HandleFunc("/ws", wsHandler)
 
-	fmt.Println("Listening on :8080")
-	err := http.ListenAndServe(":8080", mux)
+	fmt.Println("Listening on :" + config.BroadcastPort)
+	err := http.ListenAndServe(":"+config.BroadcastPort, mux)
 	if err != nil {
 		fmt.Printf("%+v\n", errors.WithStack(err))
 		os.Exit(1)

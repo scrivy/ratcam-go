@@ -10,3 +10,4 @@ homeipv6: "2602:645:4100:2349:"
 redirect_to_local: false
 localaddr: "http://192.168.1.6:8080"
 max_stream_duration_minutes: 15
+broadcast_port: "8000"

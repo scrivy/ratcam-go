@@ -21,7 +21,8 @@ type Config struct {
 	HomeIPv6                 string
 	RedirectToLocal          bool `yaml:"redirect_to_local"`
 	LocalAddr                string
-	MaxStreamDurationMinutes int `yaml:"max_stream_duration_minutes"`
+	MaxStreamDurationMinutes int    `yaml:"max_stream_duration_minutes"`
+	BroadcastPort            string `yaml:"broadcast_port"`
 }
 
 var config Config
