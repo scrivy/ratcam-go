@@ -38,13 +38,6 @@ func main() {
 		os.Exit(0)
 	}
 
-	// for profiling
-	if config.Debug {
-		go func() {
-			fmt.Println(http.ListenAndServe("localhost:6060", nil))
-		}()
-	}
-
 	// load config
 	configFile, err := os.Open(*configPath)
 	if err != nil {
@@ -58,6 +51,13 @@ func main() {
 	}
 	if config.Debug {
 		fmt.Printf("config:\n%#v\n", config)
+	}
+
+	// for profiling
+	if config.Debug {
+		go func() {
+			fmt.Println(http.ListenAndServe("localhost:6060", nil))
+		}()
 	}
 
 	// split the service into 2 nodes
