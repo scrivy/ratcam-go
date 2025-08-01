@@ -5,7 +5,6 @@ import (
 	"encoding/gob"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -39,7 +38,7 @@ func broadcast(indexHtmlPath string) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		htmlIndex, err := ioutil.ReadFile(indexHtmlPath)
+		htmlIndex, err := os.ReadFile(indexHtmlPath)
 		if err != nil {
 			fmt.Println(err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)

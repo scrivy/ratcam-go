@@ -74,5 +74,4 @@ func main() {
 		fmt.Printf("mode not supported. both, capture, or broadcast. Is it set in the yaml config?")
 		os.Exit(1)
 	}
-	return
 }
