@@ -1,13 +1,14 @@
 ---
 mode: both
-debug: false
+debug: true
 pixelformat: 1196444237
+webcamdevicepath: "/dev/video0"
 width: 1280
 height: 720
 cameraip: "127.0.0.1"
 cameraport: "5005"
 homeipv6: "2602:645:4100:2349:"
 redirect_to_local: false
-localaddr: "http://192.168.1.6:8080"
+localaddr: "http://0.0.0.0:8080"
 max_stream_duration_minutes: 15
 broadcast_port: "8000"
