@@ -14,6 +14,7 @@ type Config struct {
 	Mode                     string
 	Debug                    bool
 	PixelFormat              int
+	WebcamDevicePath         string
 	Width                    int
 	Height                   int
 	CameraIP                 string

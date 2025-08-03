@@ -10,14 +10,12 @@ import (
 	"github.com/pkg/errors"
 )
 
-const webcamDevicePath = "/dev/video0"
-
 var camera *webcam.Webcam
 
 func capture() {
 	// open camera
 	var err error
-	camera, err = webcam.Open(webcamDevicePath)
+	camera, err = webcam.Open(config.WebcamDevicePath)
 	if err != nil {
 		panic(err)
 	}
